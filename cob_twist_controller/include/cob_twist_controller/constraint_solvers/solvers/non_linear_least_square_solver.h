@@ -33,15 +33,21 @@
 
 #include "cob_twist_controller/cob_twist_controller_data_types.h"
 #include "cob_twist_controller/constraint_solvers/solvers/constraint_solver_base.h"
-#include "ceres/ceres.h"
-#include "glog/logging.h"
+//#include "ceres/ceres.h"
+//#include "glog/logging.h"
 
-using ceres::AutoDiffCostFunction;
-using ceres::CostFunction;
-using ceres::Problem;
-using ceres::Solver;
-using ceres::Solve;
+#include <acado_toolkit.hpp>
+#include <acado/acado_optimal_control.hpp>
+#include <acado/bindings/acado_gnuplot/gnuplot_window.hpp>
 
+
+//using ceres::AutoDiffCostFunction;
+//using ceres::CostFunction;
+//using ceres::Problem;
+//using ceres::Solver;
+//using ceres::Solve;
+
+using namespace ACADO;
 /// Implementation of ConstraintSolver to solve inverse kinematics by using a weighted least norm
 class NonLinearLeastSquareNormSolver : public ConstraintSolver<>
 {

@@ -44,23 +44,77 @@ struct CostFunctor {
 Eigen::MatrixXd NonLinearLeastSquareNormSolver::solve(const Vector6d_t& in_cart_velocities,
                                                const JointStates& joint_states)
 {
-    // The variable to solve for with its initial value. It will be
-      // mutated in place by the solver.
-      double x = 0.5;
-      const double initial_x = x;
-      // Build the problem.
-      Problem problem;
-      // Set up the only cost function (also known as residual). This uses
-      // auto-differentiation to obtain the derivative (jacobian).
-      CostFunction* cost_function = new AutoDiffCostFunction<CostFunctor, 1, 1>(new CostFunctor);
-      problem.AddResidualBlock(cost_function, NULL, &x);
-      // Run the solver!
-      Solver::Options options;
-      options.minimizer_progress_to_stdout = true;
-      Solver::Summary summary;
-      Solve(options, &problem, &summary);
-      std::cout << summary.BriefReport() << "\n";
-      std::cout << "x : " << initial_x << " -> " << x << "\n";
+	    // INTRODUCE THE VARIABLES:
+	    // ----------------------------
+		DifferentialState    x("", 6, 1);    // a differential state vector with dimension 10. (vector)
+		DifferentialState    y;
+		DifferentialState    z;
+	    Control              u("", 7, 1);    // a control input with dimension 2.              (vector)
+
+	    DifferentialEquation f    ;    // the differential equation
+
+
+	    x.clearStaticCounters();
+	    y.clearStaticCounters();
+	    z.clearStaticCounters();
+	    u.clearStaticCounters();
+
+	    const double t_start =  0.0;
+	    const double t_end   =  1.0;
+	    const int horizon = 10;
+
+
+	    // READ A MATRIX "A" FROM A FILE:
+	    // ------------------------------
+	    DMatrix A;
+	    A = this->jacobian_data_;
+
+	    // READ A VECTOR "x0" FROM A FILE:
+	    // -------------------------------
+	    DVector x0;
+	    x0 = in_cart_velocities;
+
+	    DVector xEnd; xEnd = in_cart_velocities * 0;
+
+	    // DEFINE A DIFFERENTIAL EQUATION:
+	    // -------------------------------
+
+	    f << dot(x) == A*u;                           			// matrix vector notation for a linear equation
+	    f << dot(y) == 0.5*3*u.transpose() * u;			  	// matrix vector notation:  x^x  = scalar product = ||x||_2^2
+//	    f << dot(z) == 10000*(x+x0).transpose()*(x+x0);
+
+	    // DEFINE AN OPTIMAL CONTROL PROBLEM:
+	    // ----------------------------------
+	    OCP ocp( t_start, t_end, horizon );
+
+	    ocp.minimizeMayerTerm( y );		// running cost
+//	    ocp.minimizeMayerTerm( z );		// Terminal Cost
+
+	    ocp.subjectTo( f );
+
+	    ocp.subjectTo( AT_START, x == -x0  );
+	    ocp.subjectTo( AT_END  , x == xEnd);
+
+	    ocp.subjectTo( AT_START, y == (double)(x0.transpose() * x0));
+//	    ocp.subjectTo( AT_START, z == 0);
+
+	    ocp.subjectTo( -M_PI <= u <= M_PI);
+
+	    // DEFINE AN OPTIMIZATION ALGORITHM AND SOLVE THE OCP:
+	    // ---------------------------------------------------
+	    OptimizationAlgorithm algorithm(ocp);
+
+	    algorithm.set( MAX_NUM_ITERATIONS, 20 );
+	    algorithm.set( KKT_TOLERANCE, 1e-10 );
+
+	    algorithm.solve();
+
+	    VariablesGrid states, parameters, controls;
+
+	    algorithm.getControls(controls);
+
+
+	    return controls.getFirstVector();
 }
 
 /**
