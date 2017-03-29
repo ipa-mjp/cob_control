@@ -76,6 +76,7 @@ class NonLinearLeastSquareNormSolver : public ConstraintSolver<>
          * @return Diagonal weighting matrix that adapts the Jacobian.
          */
         virtual Eigen::MatrixXd calculateWeighting(const JointStates& joint_states) const;
+
 };
 
 #endif  // COB_TWIST_CONTROLLER_CONSTRAINT_SOLVERS_SOLVERS_NONLINEAR_LEAST_SQUARE_NORM_SOLVER_H
