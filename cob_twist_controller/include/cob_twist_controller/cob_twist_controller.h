@@ -61,6 +61,7 @@
 class CobTwistController
 {
 private:
+
     ros::NodeHandle nh_;
 
     ros::Subscriber jointstate_sub_;

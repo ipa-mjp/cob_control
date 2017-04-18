@@ -36,7 +36,7 @@
 //#include "ceres/ceres.h"
 //#include "glog/logging.h"
 
-#include <acado_toolkit.hpp>
+#include <acado/acado_toolkit.hpp>
 #include <acado/acado_optimal_control.hpp>
 #include <acado/bindings/acado_gnuplot/gnuplot_window.hpp>
 
@@ -66,7 +66,8 @@ class NonLinearLeastSquareNormSolver : public ConstraintSolver<>
          * See base class ConstraintSolver for more details on params and returns.
          */
         virtual Eigen::MatrixXd solve(const Vector6d_t& in_cart_velocities,
-                                      const JointStates& joint_states);
+                                      const JointStates& joint_states,
+                                      const CallbackDataMediator& cbdm);
 
     private:
         /**

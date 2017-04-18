@@ -37,7 +37,8 @@
  */
 int InverseDifferentialKinematicsSolver::CartToJnt(const JointStates& joint_states,
                                                    const KDL::Twist& v_in,
-                                                   KDL::JntArray& qdot_out)
+                                                   KDL::JntArray& qdot_out,
+                                                   const CallbackDataMediator& cbdm)
 {
     // ROS_INFO_STREAM("joint_states.current_q_: " << joint_states.current_q_.rows());
     int8_t retStat = -1;
@@ -61,7 +62,8 @@ int InverseDifferentialKinematicsSolver::CartToJnt(const JointStates& joint_stat
     retStat = constraint_solver_factory_.calculateJointVelocities(jac_full.data,
                                                                   v_in_vec,
                                                                   joint_states_full,
-                                                                  qdot_out_vec);
+                                                                  qdot_out_vec,
+                                                                  cbdm);
 
     /// convert output
     KDL::JntArray qdot_out_full(jac_full.columns());

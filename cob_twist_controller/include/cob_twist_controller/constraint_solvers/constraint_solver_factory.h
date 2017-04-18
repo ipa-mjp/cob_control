@@ -81,7 +81,8 @@ class ConstraintSolverFactory
         int8_t calculateJointVelocities(Matrix6Xd_t& jacobian_data,
                                         const Vector6d_t& in_cart_velocities,
                                         const JointStates& joint_states,
-                                        Eigen::MatrixXd& out_jnt_velocities);
+                                        Eigen::MatrixXd& out_jnt_velocities,
+                                        const CallbackDataMediator& cbdm);
 
         /**
          * Given a constraint_type create a solver_factory instance and return it.

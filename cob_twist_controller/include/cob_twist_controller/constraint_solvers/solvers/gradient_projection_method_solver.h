@@ -56,7 +56,8 @@ class GradientProjectionMethodSolver : public ConstraintSolver<>
          * See base class ConstraintSolver for more details on params and returns.
          */
         virtual Eigen::MatrixXd solve(const Vector6d_t& in_cart_velocities,
-                                      const JointStates& joint_states);
+                                      const JointStates& joint_states,
+                                      const CallbackDataMediator& cbdm);
 };
 
 #endif  // COB_TWIST_CONTROLLER_CONSTRAINT_SOLVERS_SOLVERS_GRADIENT_PROJECTION_METHOD_SOLVER_H

@@ -33,7 +33,8 @@
 #include "cob_twist_controller/task_stack/task_stack_controller.h"
 
 Eigen::MatrixXd StackOfTasksSolver::solve(const Vector6d_t& in_cart_velocities,
-                                          const JointStates& joint_states)
+                                          const JointStates& joint_states,
+                                          const CallbackDataMediator& cbdm)
 {
     this->global_constraint_state_ = NORMAL;
     ros::Time now = ros::Time::now();

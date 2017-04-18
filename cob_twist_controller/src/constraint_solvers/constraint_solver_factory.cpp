@@ -50,7 +50,8 @@
 int8_t ConstraintSolverFactory::calculateJointVelocities(Matrix6Xd_t& jacobian_data,
                                                          const Vector6d_t& in_cart_velocities,
                                                          const JointStates& joint_states,
-                                                         Eigen::MatrixXd& out_jnt_velocities)
+                                                         Eigen::MatrixXd& out_jnt_velocities,
+                                                         const CallbackDataMediator& cbdm)
 {
     out_jnt_velocities = Eigen::MatrixXd::Zero(joint_states.current_q_dot_.rows(),
                                                joint_states.current_q_dot_.columns());
@@ -68,11 +69,13 @@ int8_t ConstraintSolverFactory::calculateJointVelocities(Matrix6Xd_t& jacobian_d
         // everything seems to be alright!
     }
 
+
     out_jnt_velocities = this->solver_factory_->calculateJointVelocities(jacobian_data,
                                                                          in_cart_velocities,
                                                                          joint_states,
                                                                          this->damping_method_,
-                                                                         this->constraints_);
+                                                                         this->constraints_,
+                                                                         cbdm);
 
     return 0;   // success
 }

@@ -389,7 +389,8 @@ void CobTwistController::solveTwist(KDL::Twist twist)
 
     int ret_ik = p_inv_diff_kin_solver_->CartToJnt(this->joint_states_,
                                                    twist,
-                                                   q_dot_ik);
+                                                   q_dot_ik,
+                                                   callback_data_mediator_);
 
     if (0 != ret_ik)
     {

@@ -47,7 +47,9 @@ class CallbackDataMediator
         ObstacleDistancesInfo_t obstacle_distances_;
         boost::mutex distances_to_obstacles_lock_;
 
+
     public:
+        double min_distance_;
         CallbackDataMediator() {}
 
         /**
@@ -74,6 +76,8 @@ class CallbackDataMediator
          * @param msg The published message containting obstacle distances.
          */
         void distancesToObstaclesCallback(const cob_control_msgs::ObstacleDistances::ConstPtr& msg);
+
+        double getDistances();
 };
 
 #endif  // COB_TWIST_CONTROLLER_CALLBACK_DATA_MEDIATOR_H

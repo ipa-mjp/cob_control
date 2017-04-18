@@ -35,7 +35,8 @@
  * Uses the base implementation of calculatePinvJacobianBySVD to calculate the pseudo-inverse (weighted) Jacobian.
  */
 Eigen::MatrixXd WeightedLeastNormSolver::solve(const Vector6d_t& in_cart_velocities,
-                                               const JointStates& joint_states)
+                                               const JointStates& joint_states,
+                                               const CallbackDataMediator& cbdm)
 {
     Eigen::MatrixXd W_WLN = this->calculateWeighting(joint_states);
     // for the following formulas see Chan paper ISSN 1042-296X [Page 288]

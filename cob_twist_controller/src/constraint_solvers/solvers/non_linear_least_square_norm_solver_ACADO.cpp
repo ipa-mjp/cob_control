@@ -42,7 +42,8 @@ struct CostFunctor {
 };
 
 Eigen::MatrixXd NonLinearLeastSquareNormSolverACADO::solve(const Vector6d_t& in_cart_velocities,
-                                               const JointStates& joint_states)
+                                               const JointStates& joint_states,
+                                               const CallbackDataMediator& cbdm)
 {
     DifferentialState        s,v,m      ;   // the differential states
     Control                  u          ;   // the control input u

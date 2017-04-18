@@ -56,8 +56,12 @@ bool CallbackDataMediator::fill(ConstraintParamsCA& params_ca)
             success = true;
         }
     }
-
     return success;
+}
+
+double CallbackDataMediator::getDistances()
+{
+    return this->min_distance_;
 }
 
 /// Can be used to fill parameters for joint limit avoidance.
@@ -71,6 +75,7 @@ void CallbackDataMediator::distancesToObstaclesCallback(const cob_control_msgs::
 {
     boost::mutex::scoped_lock lock(distances_to_obstacles_lock_);
     this->obstacle_distances_.clear();
+    min_distance_ = 999;
     for (cob_control_msgs::ObstacleDistances::_distances_type::const_iterator it = msg->distances.begin(); it != msg->distances.end(); it++)
     {
         ObstacleDistanceData d;
@@ -79,5 +84,10 @@ void CallbackDataMediator::distancesToObstaclesCallback(const cob_control_msgs::
         tf::vectorMsgToEigen(it->nearest_point_frame_vector, d.nearest_point_frame_vector);
         tf::vectorMsgToEigen(it->nearest_point_obstacle_vector, d.nearest_point_obstacle_vector);
         this->obstacle_distances_[it->link_of_interest].push_back(d);
+
+        if(min_distance_ > it->distance)
+        {
+            min_distance_ = it->distance;
+        }
     }
 }

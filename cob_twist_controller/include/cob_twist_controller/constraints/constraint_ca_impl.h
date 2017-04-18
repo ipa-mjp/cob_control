@@ -334,6 +334,7 @@ void CollisionAvoidance<T_PARAMS, PRIO>::calcPartialValues()
                 vec_norm = (vec_norm > 0.0) ? vec_norm : DIV0_SAFE;
                 Eigen::VectorXd term_2nd = (m_transl.transpose()) * (distance_vec / vec_norm);  // use the unit vector only for direction!
 
+                ROS_WARN_STREAM("gradient: " << term_2nd);
                 // Gradient of the cost function from: Strasse O., Escande A., Mansard N. et al.
                 // "Real-Time (Self)-Collision Avoidance Task on a HRP-2 Humanoid Robot", 2008 IEEE International Conference
                 const double denom = it->min_distance > 0.0 ? it->min_distance : DIV0_SAFE;
@@ -434,6 +435,7 @@ void CollisionAvoidance<T_PARAMS, PRIO>::calcPredictionValue()
             Eigen::Vector3d delta_pred_vel = pred_twist_vel + pred_twist_rot.cross(critical_data.nearest_point_frame_vector);
             Eigen::Vector3d pred_pos = critical_data.nearest_point_frame_vector + delta_pred_vel * cycle;
             this->prediction_value_ = (critical_data.nearest_point_obstacle_vector - pred_pos).norm();
+            this->prediction_value_ = critical_data.min_distance;
         }
     }
     else
