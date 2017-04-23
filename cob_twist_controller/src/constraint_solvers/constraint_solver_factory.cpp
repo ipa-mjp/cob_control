@@ -38,6 +38,7 @@
 #include "cob_twist_controller/constraint_solvers/solvers/task_priority_solver.h"
 #include "cob_twist_controller/constraint_solvers/solvers/stack_of_tasks_solver.h"
 #include "cob_twist_controller/constraint_solvers/solvers/unified_joint_limit_singularity_solver.h"
+#include "cob_twist_controller/constraint_solvers/solvers/nonlinear_model_predictive_control.h"
 
 #include "cob_twist_controller/damping_methods/damping.h"
 #include "cob_twist_controller/constraints/constraint.h"
@@ -113,6 +114,9 @@ bool ConstraintSolverFactory::getSolverFactory(const TwistControllerParams& para
             break;
         case TASK_2ND_PRIO:
             solver_factory.reset(new SolverFactory<TaskPrioritySolver>(params, limiter_params, task_stack_controller));
+            break;
+        case NMPC:
+            solver_factory.reset(new SolverFactory<NonlinearModelPredictiveControl>(params, limiter_params, task_stack_controller));
             break;
         default:
             ROS_ERROR("Returning NULL factory due to constraint solver creation error. There is no solver method for %d implemented.",

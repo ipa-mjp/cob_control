@@ -71,6 +71,7 @@ enum SolverTypes
     STACK_OF_TASKS = cob_twist_controller::TwistController_STACK_OF_TASKS,
     TASK_2ND_PRIO = cob_twist_controller::TwistController_TASK_2ND_PRIO,
     UNIFIED_JLA_SA = cob_twist_controller::TwistController_UNIFIED_JLA_SA,
+	NMPC = cob_twist_controller::TwistController_NMPC,
 };
 
 enum ConstraintTypesCA
