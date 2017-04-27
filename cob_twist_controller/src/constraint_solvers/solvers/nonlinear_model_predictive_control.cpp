@@ -28,11 +28,8 @@
  ****************************************************************/
 
 #include "cob_twist_controller/constraint_solvers/solvers/nonlinear_model_predictive_control.h"
-#include <ctime>
-#include <casadi/casadi.hpp>
 
-using namespace casadi;
-using namespace std;
+
 
 Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart_velocities,
                                                        const JointStates& joint_states)
@@ -49,9 +46,9 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
     int nu = u.size1();
 
     // Bounds and initial guess for the control
-    vector<double> u_min =  { -2, -2, -2, -2, -2, -2, -2 };
-    vector<double> u_max  = {  2,  2,  2,  2,  2,  2,  2 };
-    vector<double> u_init = {  0.0,0.0,0.0,0.0,0.0,0.0,0.0  };
+    vector<double> u_min =  { -1, -1, -1, -1, -1, -1, -1 };
+    vector<double> u_max  = {  1,  1,  1,  1,  1,  1,  1 };
+//    vector<double> u_init = {  0.0,0.0,0.0,0.0,0.0,0.0,0.0  };
 
     // Bounds and initial guess for the state
     vector<double> x0_min = { joint_states.current_q_.data(0), joint_states.current_q_.data(1), joint_states.current_q_.data(2), joint_states.current_q_.data(3), joint_states.current_q_.data(4), joint_states.current_q_.data(5), joint_states.current_q_.data(6) };
@@ -63,25 +60,39 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
     vector<double> x_init = { joint_states.current_q_.data(0), joint_states.current_q_.data(1), joint_states.current_q_.data(2), joint_states.current_q_.data(3), joint_states.current_q_.data(4), joint_states.current_q_.data(5), joint_states.current_q_.data(6) };
 
     // Final time
-    double tf = 0.5;
+    double tf = 1.0;
 
     // Number of shooting nodes
-    int ns = 5;
+    int ns = 7;
 
     // ODE right hand side and quadrature
-    SX ode = SX::vertcat({u(0), u(1), u(2), u(3), u(4), u(5), u(6)});
+    SX qdot = SX::vertcat({u(0), u(1), u(2), u(3), u(4), u(5), u(6)});
 
     SX fk =  SX::horzcat({(1493.0*sin(x(3))*(sin(x(0))*sin(x(2)) - cos(x(0))*cos(x(1))*cos(x(2))))/5000.0 - (567.0*cos(x(0))*sin(x(1)))/1250.0 - (1493.0*cos(x(0))*cos(x(3))*sin(x(1)))/5000.0,
                      -(567.0*sin(x(0))*sin(x(1)))/1250.0 - (1493.0*sin(x(3))*(cos(x(0))*sin(x(2)) + cos(x(1))*cos(x(2))*sin(x(0))))/5000.0 - (1493.0*cos(x(3))*sin(x(0))*sin(x(1)))/5000.0,
                      (567.0*cos(x(1)))/1250.0 + (1493.0*cos(x(1))*cos(x(3)))/5000.0 - (1493.0*cos(x(2))*sin(x(1))*sin(x(3)))/5000.0 + 563.0/2000.0});
 
-    SX x_desired = SX::horzcat({0.1, 0.1, 0.7});
+    SX x_desired = SX::horzcat({0.3, 0.1, 0.5});
 
-    SX quad =  dot((fk - x_desired),(fk - x_desired));
-    SXDict dae = {{"x", x}, {"p", u}, {"ode", ode}, {"quad", quad}};
+
+    // Cost
+    SX L = dot((fk - x_desired), (fk - x_desired))+ dot(0.1*u, 0.1*u);
+
+
+    SXDict dae = {{"x", x}, {"p", u}, {"ode", qdot}, {"quad", L}};
 
     // Create an integrator (CVodes)
     Function F = integrator("integrator", "cvodes", dae, {{"t0", 0}, {"tf", tf/ns}});
+
+
+    // Create integrator
+    string plugin;
+    Dict opts_integrator;
+
+//    plugin = "rk";
+////    opts_integrator["number_of_finite_elements"] = 1000;
+//    Function F = integrator("integrator", plugin, dae, opts_integrator);
+
     // Total number of NLP variables
     int NV = nx*(ns+1) + nu*ns;
 
@@ -117,7 +128,7 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
         U.push_back( V.nz(Slice(offset,offset+nu)));
         v_min.insert(v_min.end(), u_min.begin(), u_min.end());
         v_max.insert(v_max.end(), u_max.begin(), u_max.end());
-        v_init.insert(v_init.end(), u_init.begin(), u_init.end());
+        v_init.insert(v_init.end(), u_init_.begin(), u_init_.end());
         offset += nu;
     }
 
@@ -138,15 +149,16 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
     vector<MX> g;
 
     // Loop over shooting nodes
-    for(int k=0; k<ns; ++k){
-      // Create an evaluation node
-      MXDict I_out = F(MXDict{{"x0", X[k]}, {"p", U[k]}});
+    for(int k=0; k<ns; ++k)
+    {
+        // Create an evaluation node
+        MXDict I_out = F(MXDict{{"x0", X[k]}, {"p", U[k]}});
 
-      // Save continuity constraints
-      g.push_back( I_out.at("xf") - X[k+1] );
+        // Save continuity constraints
+        g.push_back( I_out.at("xf") - X[k+1] );
 
-      // Add objective function contribution
-      J += I_out.at("qf");
+        // Add objective function contribution
+        J += I_out.at("qf");
     }
 
     // NLP
@@ -154,12 +166,16 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
 
     // Set options
     Dict opts;
+
     opts["ipopt.tol"] = 1e-5;
     opts["ipopt.max_iter"] = 100;
+    opts["ipopt.hessian_approximation"] = "limited-memory";
+    opts["ipopt.hessian_constant"] = "yes";
 //    opts["ipopt.linear_solver"] = "ma27";
 
     // Create an NLP solver and buffers
     Function solver = nlpsol("nlpsol", "ipopt", nlp, opts);
+
     std::map<std::string, DM> arg, res;
 
     // Bounds and initial guess
@@ -175,15 +191,6 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
     // Optimal solution of the NLP
     vector<double> V_opt(res.at("x"));
 
-//    // Get the optimal state trajectory
-//    vector<double> r_opt(ns+1), s_opt(ns+1);
-//    for(int i=0; i<=ns; ++i){
-//      r_opt[i] = V_opt.at(i*(nx+1));
-//      s_opt[i] = V_opt.at(1+i*(nx+1));
-//    }
-//    cout << "r_opt = " << endl << r_opt << endl;
-//    cout << "s_opt = " << endl << s_opt << endl;
-
     // Get the optimal control
     Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(nu);
 
@@ -194,6 +201,11 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
             q_dot[j] = V_opt.at(nx + j);
         }
     }
+//    for(int j=0; j<nu-1; ++j)
+//    {
+//        u_init_[j] = V_opt.at(nx + j);
+//    }
+//    u_init_[nu] = 0;
 
 //    vector<double> u_opt(ns);
 //    for(int i=0; i<ns; ++i){

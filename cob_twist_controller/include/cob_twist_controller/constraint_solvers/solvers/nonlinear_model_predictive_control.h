@@ -36,7 +36,11 @@
 
 #include "cob_twist_controller/cob_twist_controller_data_types.h"
 #include "cob_twist_controller/constraint_solvers/solvers/constraint_solver_base.h"
+#include <ctime>
+#include <casadi/casadi.hpp>
 
+using namespace casadi;
+using namespace std;
 //#include "ceres/ceres.h"
 //#include "glog/logging.h"
 //#include <acado/acado_toolkit.hpp>
@@ -50,7 +54,10 @@ class NonlinearModelPredictiveControl : public ConstraintSolver<>
                                            const LimiterParams& limiter_params,
                                            TaskStackController_t& task_stack_controller) :
                 ConstraintSolver(params, limiter_params, task_stack_controller)
-        {}
+        {
+            u_init_ = {  0.0,0.0,0.0,0.0,0.0,0.0,0.0  };
+            jit_ = true;
+        }
 
         virtual ~NonlinearModelPredictiveControl()
         {}
@@ -59,6 +66,8 @@ class NonlinearModelPredictiveControl : public ConstraintSolver<>
                                       const JointStates& joint_states);
 
     private:
+        vector<double> u_init_;
+        bool jit_;
 
         virtual Eigen::MatrixXd calculateWeighting(const Vector6d_t& in_cart_velocities, const JointStates& joint_states) const;
 };
