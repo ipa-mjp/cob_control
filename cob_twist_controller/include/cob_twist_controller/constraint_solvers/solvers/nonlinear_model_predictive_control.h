@@ -55,7 +55,7 @@ class NonlinearModelPredictiveControl : public ConstraintSolver<>
                                            TaskStackController_t& task_stack_controller) :
                 ConstraintSolver(params, limiter_params, task_stack_controller)
         {
-            u_init_ = {  0.0,0.0,0.0,0.0,0.0,0.0,0.0  };
+            u_init_ = { 0.0,0.0,0.0,0.0,0.0,0.0,0.0 };
             jit_ = true;
         }
 
@@ -68,8 +68,10 @@ class NonlinearModelPredictiveControl : public ConstraintSolver<>
     private:
         vector<double> u_init_;
         bool jit_;
-
         virtual Eigen::MatrixXd calculateWeighting(const Vector6d_t& in_cart_velocities, const JointStates& joint_states) const;
+        Function create_integrator(const unsigned int state_dim, const unsigned int control_dim, const double T,
+                                   const unsigned int N, SX ode, SX x, SX u, SX L);
+
 };
 
 #endif  // COB_TWIST_CONTROLLER_CONSTRAINT_SOLVERS_SOLVERS_NONLINEAR_MODEL_PREDICTIVE_CONTROL_H
