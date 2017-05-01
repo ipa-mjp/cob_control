@@ -284,10 +284,6 @@ void CobFrameTracker::publishTwist(ros::Duration period, bool do_publish)
         twist_msg.twist.linear.x = pid_controller_trans_x_.computeCommand(transform_tf.getOrigin().x(), period);
         twist_msg.twist.linear.y = pid_controller_trans_y_.computeCommand(transform_tf.getOrigin().y(), period);
         twist_msg.twist.linear.z = pid_controller_trans_z_.computeCommand(transform_tf.getOrigin().z(), period);
-        pose_msg.position.x = transform_tf_pose.getOrigin().x();
-        pose_msg.position.y = transform_tf_pose.getOrigin().y();
-        pose_msg.position.z = transform_tf_pose.getOrigin().z();
-
     }
 
     if (movable_rot_)
@@ -298,9 +294,9 @@ void CobFrameTracker::publishTwist(ros::Duration period, bool do_publish)
         twist_msg.twist.angular.x = pid_controller_rot_x_.computeCommand(transform_tf.getRotation().x(), period);
         twist_msg.twist.angular.y = pid_controller_rot_y_.computeCommand(transform_tf.getRotation().y(), period);
         twist_msg.twist.angular.z = pid_controller_rot_z_.computeCommand(transform_tf.getRotation().z(), period);
-        pose_msg.orientation = transform_tf_pose.getRotation();
-
     }
+
+    tf::poseTFToMsg(transform_tf_pose, pose_msg);
 
     /// debug only
     /**
