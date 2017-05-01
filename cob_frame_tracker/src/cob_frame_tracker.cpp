@@ -64,6 +64,16 @@ bool CobFrameTracker::initialize()
         return false;
     }
 
+    if (nh_.hasParam("root_frame"))
+    {
+        nh_.getParam("root_frame", root_frame_);
+    }
+    else
+    {
+        ROS_ERROR("No root_frame specified. Aborting!");
+        return false;
+    }
+
     if (nh_.hasParam("chain_tip_link"))
     {
         nh_.getParam("chain_tip_link", chain_tip_link_);
@@ -165,6 +175,7 @@ bool CobFrameTracker::initialize()
 
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobFrameTracker::jointstateCallback, this);
     twist_pub_ = nh_twist.advertise<geometry_msgs::TwistStamped> ("command_twist_stamped", 1);
+    pos_pub_ = nh_.advertise<geometry_msgs::Pose> ("command_pose", 1);
 
     start_tracking_server_ = nh_tracker.advertiseService("start_tracking", &CobFrameTracker::startTrackingCallback, this);
     start_lookat_server_ = nh_tracker.advertiseService("start_lookat", &CobFrameTracker::startLookatCallback, this);
@@ -249,12 +260,18 @@ void CobFrameTracker::publishZeroTwist()
 
 void CobFrameTracker::publishTwist(ros::Duration period, bool do_publish)
 {
-    tf::StampedTransform transform_tf;
-    bool success = this->getTransform(tracking_frame_, target_frame_, transform_tf);
+    tf::StampedTransform transform_tf, transform_tf_pose;
+    bool success;
+
+    success = this->getTransform(root_frame_, target_frame_, transform_tf_pose);
+    success = this->getTransform(chain_tip_link_, target_frame_, transform_tf);
 
     geometry_msgs::TwistStamped twist_msg;
-    twist_msg.header.frame_id = tracking_frame_;
+    geometry_msgs::Pose pose_msg;
+//    twist_msg.header.frame_id = "world";
+    twist_msg.header.frame_id = chain_tip_link_;
     twist_msg.header.stamp = ros::Time::now();
+
 
     if (!success)
     {
@@ -267,6 +284,10 @@ void CobFrameTracker::publishTwist(ros::Duration period, bool do_publish)
         twist_msg.twist.linear.x = pid_controller_trans_x_.computeCommand(transform_tf.getOrigin().x(), period);
         twist_msg.twist.linear.y = pid_controller_trans_y_.computeCommand(transform_tf.getOrigin().y(), period);
         twist_msg.twist.linear.z = pid_controller_trans_z_.computeCommand(transform_tf.getOrigin().z(), period);
+        pose_msg.position.x = transform_tf_pose.getOrigin().x();
+        pose_msg.position.y = transform_tf_pose.getOrigin().y();
+        pose_msg.position.z = transform_tf_pose.getOrigin().z();
+
     }
 
     if (movable_rot_)
@@ -277,6 +298,10 @@ void CobFrameTracker::publishTwist(ros::Duration period, bool do_publish)
         twist_msg.twist.angular.x = pid_controller_rot_x_.computeCommand(transform_tf.getRotation().x(), period);
         twist_msg.twist.angular.y = pid_controller_rot_y_.computeCommand(transform_tf.getRotation().y(), period);
         twist_msg.twist.angular.z = pid_controller_rot_z_.computeCommand(transform_tf.getRotation().z(), period);
+        pose_msg.orientation.x = transform_tf_pose.getOrigin().x();
+        pose_msg.orientation.y = transform_tf_pose.getOrigin().y();
+        pose_msg.orientation.z = transform_tf_pose.getOrigin().z();
+
     }
 
     /// debug only
@@ -320,6 +345,7 @@ void CobFrameTracker::publishTwist(ros::Duration period, bool do_publish)
     if (do_publish)
     {
         twist_pub_.publish(twist_msg);
+        pos_pub_.publish(pose_msg);
     }
 }
 

@@ -118,6 +118,7 @@ private:
     bool lookat_;
     std::string chain_base_link_;
     std::string chain_tip_link_;
+    std::string root_frame_;
     std::string lookat_focus_frame_;
     std::string tracking_frame_;    // the frame tracking the target (i.e. chain_tip or lookat_focus)
     std::string target_frame_;      // the frame to be tracked
@@ -149,6 +150,7 @@ private:
 
     ros::Subscriber jointstate_sub_;
     ros::Publisher twist_pub_;
+    ros::Publisher pos_pub_;
 
     ros::ServiceServer start_tracking_server_;
     ros::ServiceServer start_lookat_server_;

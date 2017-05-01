@@ -70,7 +70,7 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
     unsigned int control_dim = 7;
 
     // Distance to obstacle
-    double min_dist = 0.5;
+    double min_dist = 0.7;
 
     // Declare variables
     SX u = SX::sym("u", state_dim); // control
@@ -92,7 +92,6 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
     vector<double> xf_min = { -inf,-inf,-inf,-inf,-inf,-inf,-inf};
     vector<double> xf_max = {  inf, inf, inf, inf, inf, inf, inf };
     vector<double> x_init = { joint_states.current_q_.data(0), joint_states.current_q_.data(1), joint_states.current_q_.data(2), joint_states.current_q_.data(3), joint_states.current_q_.data(4), joint_states.current_q_.data(5), joint_states.current_q_.data(6) };
-
 
 
     // ODE right hand side and quadrature
@@ -121,7 +120,20 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
 
     // Barrier function for distance
 //    SX barrier = exp((min_dist - sqrt(dist))/0.01);
-    SX barrier = 1.0/(dist - min_dist*min_dist);
+
+    bool enable_distance = limiter_params_.enforce_acc_limits;
+
+    SX barrier;
+    if(enable_distance)
+    {
+//        barrier= 1.0/(dist - min_dist*min_dist);
+        barrier = exp((min_dist - sqrt(dist))/0.01);
+    }
+    else
+    {
+//        barrier= 1.0/(dist - min_dist*min_dist);
+        barrier = 0;
+    }
 
     // Desired endeffector pose
     SX x_desired = SX::horzcat({in_cart_velocities(0), in_cart_velocities(1), in_cart_velocities(2)});
@@ -129,8 +141,8 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
 
 
     // Objective function
-    SX L = dot((fk - x_desired), (fk - x_desired)) + dot((x_rot - x_rot_desired),(x_rot - x_rot_desired)) +
-           dot(0.11*u, 0.11*u);
+    SX L = dot(10*(fk - x_desired), 10*(fk - x_desired)) + dot((x_rot - x_rot_desired),(x_rot - x_rot_desired)) +
+           dot(0.09*u, 0.09*u) + barrier;
 
 
     Function F = create_integrator(nx, nu, tf, ns, qdot, x, u, L);
@@ -236,16 +248,16 @@ Eigen::MatrixXd NonlinearModelPredictiveControl::solve(const Vector6d_t& in_cart
     vector<double> J_opt(res.at("f"));
 
     // Get the optimal control
-    Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(nu);
-
+    Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(nx);
+//    u_init_.clear();
     for(int i=0; i<1; ++i)  // Copy only the first optimal control sequence
     {
         for(int j=0; j<nu; ++j)
         {
             q_dot[j] = V_opt.at(nx + j);
+//            u_init_.push_back( V_opt.at(j) );
         }
     }
-
     return q_dot;
 }
 

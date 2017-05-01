@@ -216,12 +216,36 @@ KDL::Jacobian KinematicExtensionBaseActive::adjustJacobian(const KDL::Jacobian& 
  */
 JointStates KinematicExtensionBaseActive::adjustJointStates(const JointStates& joint_states)
 {
+    tf::StampedTransform odom_transform_bl;
+    KDL::Frame odom_frame_bl;
+    ActiveCartesianDimension active_dim;
+
     JointStates js;
     unsigned int chain_dof = joint_states.current_q_.rows();
     js.current_q_.resize(chain_dof + ext_dof_);
     js.last_q_.resize(chain_dof + ext_dof_);
     js.current_q_dot_.resize(chain_dof + ext_dof_);
     js.last_q_dot_.resize(chain_dof + ext_dof_);
+
+    try
+    {
+        ros::Time now = ros::Time(0);
+        tf_listener_.waitForTransform("odom_combined", "base_footprint", now, ros::Duration(0.5));
+        tf_listener_.lookupTransform("base_footprint", "base_footprint",  now, odom_transform_bl);
+
+        tf_listener_.waitForTransform(params_.chain_base_link, "base_link", now, ros::Duration(0.5));
+        tf_listener_.lookupTransform(params_.chain_base_link, "base_link", now, odom_transform_bl);
+    }
+    catch (tf::TransformException& ex)
+    {
+        ROS_ERROR("%s", ex.what());
+    }
+
+    odom_frame_bl.p = KDL::Vector(odom_transform_bl.getOrigin().x(), odom_transform_bl.getOrigin().y(), odom_transform_bl.getOrigin().z());
+    odom_frame_bl.M = KDL::Rotation::Quaternion(odom_transform_bl.getRotation().x(), odom_transform_bl.getRotation().y(), odom_transform_bl.getRotation().z(), odom_transform_bl.getRotation().w());
+
+    double roll, pitch, yaw;
+    odom_frame_bl.M.GetRPY(roll, pitch, yaw);
 
     for (unsigned int i = 0; i< chain_dof; i++)
     {
@@ -237,6 +261,12 @@ JointStates KinematicExtensionBaseActive::adjustJointStates(const JointStates& j
         js.current_q_dot_(chain_dof + i) = 0.0;
         js.last_q_dot_(chain_dof + i) = 0.0;
     }
+
+//    js.current_q_(chain_dof) = odom_transform_bl.getOrigin().x();
+//    js.current_q_(chain_dof+1) = odom_transform_bl.getOrigin().y();
+//    js.current_q_(chain_dof+2) = yaw;
+//
+    ROS_INFO_STREAM("Joint_states: " << odom_transform_bl.getOrigin().x() << ", " << odom_transform_bl.getOrigin().y() << ", " << yaw);
     return js;
 }
 
