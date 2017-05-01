@@ -117,7 +117,7 @@ public:
     void poseCallback(const geometry_msgs::Pose::ConstPtr& msg);
     KDL::JntArray getJointState();
 
-    Eigen::MatrixXd mpc_step(const Eigen::Matrix<double, 6, 1>& desired_pose,
+    Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose,
                              const KDL::JntArray& state);
 
     Function create_integrator(const unsigned int state_dim, const unsigned int control_dim, const double T,

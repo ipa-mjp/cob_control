@@ -191,24 +191,9 @@ bool CobNonlinearMPC::initialize()
 
 void CobNonlinearMPC::poseCallback(const geometry_msgs::Pose::ConstPtr& msg)
 {
-
-    KDL::Frame x_desired;
-    tf::poseMsgToKDL(*msg, x_desired);
-
     KDL::JntArray state = getJointState();
-    Eigen::Matrix<double, 6, 1> desired_pose;
 
-    double roll, pitch, yaw;
-    x_desired.M.GetRPY(roll, pitch, yaw);
-
-    desired_pose(0) = x_desired.p(0);
-    desired_pose(1) = x_desired.p(1);
-    desired_pose(2) = x_desired.p(2);
-    desired_pose(3) = roll;
-    desired_pose(4) = pitch;
-    desired_pose(5) = yaw;
-
-    Eigen::MatrixXd qdot = mpc_step(desired_pose, state);
+    Eigen::MatrixXd qdot = mpc_step(*msg, state);
 
 //    geometry_msgs::Twist base_vel_msg;
     std_msgs::Float64MultiArray vel_msg;
@@ -300,7 +285,7 @@ KDL::JntArray CobNonlinearMPC::getJointState()
 }
 
 
-Eigen::MatrixXd CobNonlinearMPC::mpc_step(const Eigen::Matrix<double, 6, 1>& desired_pose,
+Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
                                           const KDL::JntArray& state)
 {
     // Distance to obstacle
@@ -311,13 +296,19 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const Eigen::Matrix<double, 6, 1>& des
     vector<double> u_max  = input_constraints_max_;
 
     // Bounds and initial guess for the state
-    vector<double> x0_min = { state(0), state(1), state(2), state(3), state(4), state(5), state(6) };
-    vector<double> x0_max = { state(0), state(1), state(2), state(3), state(4), state(5), state(6) };
+    vector<double> x0_min;
+    vector<double> x0_max;
+    vector<double> x_init;
+    for(unsigned int i=0; i< state.rows();i++)
+    {
+        x0_min.push_back(state(i));
+        x0_max.push_back(state(i));
+        x_init.push_back(state(i));
+    }
     vector<double> x_min  = state_path_constraints_min_;
     vector<double> x_max  = state_path_constraints_max_;
     vector<double> xf_min = state_terminal_constraints_min_;
     vector<double> xf_max = state_terminal_constraints_max_;
-    vector<double> x_init = { state(0), state(1), state(2), state(3), state(4), state(5), state(6) };
 
     // ODE right hand side and quadrature
     SX qdot = SX::vertcat({u_(0), u_(1), u_(2), u_(3), u_(4), u_(5), u_(6)});
@@ -327,11 +318,31 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const Eigen::Matrix<double, 6, 1>& des
 
 
 //    // Transform to Euler angles
-//    SX x_e = atan2(-r31, r11);
-//    SX y_e = asin(r21);
-//    SX z_e = atan2(-r23,r22);
-//    SX x_rot = SX::horzcat({x_e, y_e, z_e});
+    SX x_e = atan2(-fk_(2,0), fk_(0,0));
+    SX y_e = asin(fk_(1,0));
+    SX z_e = atan2(-fk_(1,2),fk_(1,1));
+    SX x_rot = SX::horzcat({x_e, y_e, z_e});
+
+//    // Quaternion
+//    SX b = sqrt(1 + fk_(0,0) + fk_(1,1) + fk_(2,2));
+//    SX qw = 0.5*b;
+//    SX qx = (fk_(2,1) - fk_(1,2)) / (4*b);
+//    SX qy = (fk_(0,2) - fk_(2,0)) / (4*b);
+//    SX qz = (fk_(1,0) - fk_(0,1)) / (4*b);
+//    SX q_fk = SX::horzcat({qw, qx, qy, qz});
 //
+//    tf::Quaternion quat_tf;
+//    quat_tf.setW(pose.orientation.w);
+//    quat_tf.setX(pose.orientation.x);
+//    quat_tf.setY(pose.orientation.y);
+//    quat_tf.setZ(pose.orientation.z);
+//    tf::Quaternion q_inv_tf = quat_tf.inverse();
+//
+//    SX q_inv_fk = SX::horzcat({q_inv_tf.getW(), q_inv_tf.getX(), q_inv_tf.getY(), q_inv_tf.getZ()});
+//
+//    SX rot = q_fk *q_inv_fk;
+//    SX rot_xyz = SX::horzcat({rot(1), rot(2), rot(3)});
+
 //    // Calculate squared distance
     SX dist = dot(p,p);
 
@@ -339,11 +350,23 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const Eigen::Matrix<double, 6, 1>& des
     barrier = exp((min_dist - sqrt(dist))/0.01);
 
     // Desired endeffector pose
-    SX x_desired = SX::horzcat({desired_pose(0), desired_pose(1), desired_pose(2)});
-    SX x_rot_desired = SX::horzcat({desired_pose(3), desired_pose(4), desired_pose(5)});
+    KDL::Frame frame;
+    tf::poseMsgToKDL(pose, frame);
 
+    double roll, pitch, yaw;
+    frame.M.GetRPY(roll, pitch, yaw);
+    ROS_WARN_STREAM("rpy: " << roll << ", " << pitch << ", " << yaw);
+
+    SX x_desired = SX::horzcat({pose.position.x, pose.position.y, pose.position.z});
+
+
+    SX x_rot_desired = SX::horzcat({roll, pitch, yaw});
+
+    SX R = 10 * SX::vertcat({1, 1, 1, 1, 1, 1, 1});
+
+    SX energy = dot(dot(u_,sqrt(R)), dot(u_,sqrt(R)));
     // Objective function
-    SX L = dot(p - x_desired,p - x_desired); // + barrier;
+    SX L = dot(p - x_desired,p - x_desired)  + dot(x_rot - x_rot_desired, x_rot - x_rot_desired); // + barrier;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -462,11 +485,11 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const Eigen::Matrix<double, 6, 1>& des
     }
 
     // Safe optimal control sequence at time t_k and take it as inital guess at t_k+1
-    for(int i=0; i < control_dim_-1; ++i)
+    for(int i=0; i < control_dim_; ++i)
     {
         u_init_.push_back( q_dot(i) );
     }
-    u_init_.push_back(0);   // Not optimized
+//    u_init_.push_back(0);   // Not optimized
 
     return q_dot;
 }
