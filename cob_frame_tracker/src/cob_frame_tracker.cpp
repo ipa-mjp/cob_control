@@ -298,9 +298,7 @@ void CobFrameTracker::publishTwist(ros::Duration period, bool do_publish)
         twist_msg.twist.angular.x = pid_controller_rot_x_.computeCommand(transform_tf.getRotation().x(), period);
         twist_msg.twist.angular.y = pid_controller_rot_y_.computeCommand(transform_tf.getRotation().y(), period);
         twist_msg.twist.angular.z = pid_controller_rot_z_.computeCommand(transform_tf.getRotation().z(), period);
-        pose_msg.orientation.x = transform_tf_pose.getOrigin().x();
-        pose_msg.orientation.y = transform_tf_pose.getOrigin().y();
-        pose_msg.orientation.z = transform_tf_pose.getOrigin().z();
+        pose_msg.orientation = transform_tf_pose.getRotation();
 
     }
 
