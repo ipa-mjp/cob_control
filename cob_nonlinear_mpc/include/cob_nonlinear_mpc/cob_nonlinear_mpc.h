@@ -80,6 +80,7 @@ private:
     SX u_;
     SX x_;
     SX fk_;
+    SX fk_link4_;
     SX p_;
     tf::TransformListener tf_listener_;
 

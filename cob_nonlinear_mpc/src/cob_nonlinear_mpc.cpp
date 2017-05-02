@@ -173,6 +173,18 @@ bool CobNonlinearMPC::initialize()
         }
     }
 
+    for(int i=0; i< 5; i++)
+    {
+        if(i==0)
+        {
+            fk_link4_ = transformation_vector.at(i);
+        }
+        else
+        {
+            fk_link4_ = mtimes(fk_,transformation_vector.at(i));
+        }
+    }
+
 
 
 
@@ -289,7 +301,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
                                           const KDL::JntArray& state)
 {
     // Distance to obstacle
-    double min_dist = 0.7;
+    double min_dist = 0.2;
 
     // Bounds and initial guess for the control
     vector<double> u_min =  input_constraints_min_;
@@ -311,62 +323,83 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     vector<double> xf_max = state_terminal_constraints_max_;
 
     // ODE right hand side and quadrature
-    SX qdot = SX::vertcat({u_(0), u_(1), u_(2), u_(3), u_(4), u_(5), u_(6)});
-
-    // Position vector of end-effector
-    SX p = SX::horzcat({fk_(0,3), fk_(1,3), fk_(2,3)});
-
-
-//    // Transform to Euler angles
-    SX x_e = atan2(-fk_(2,0), fk_(0,0));
-    SX y_e = asin(fk_(1,0));
-    SX z_e = atan2(-fk_(1,2),fk_(1,1));
-    SX x_rot = SX::horzcat({x_e, y_e, z_e});
+    SX qdot = SX::vertcat({u_});
 
 //    // Quaternion
-//    SX b = sqrt(1 + fk_(0,0) + fk_(1,1) + fk_(2,2));
-//    SX qw = 0.5*b;
-//    SX qx = (fk_(2,1) - fk_(1,2)) / (4*b);
-//    SX qy = (fk_(0,2) - fk_(2,0)) / (4*b);
-//    SX qz = (fk_(1,0) - fk_(0,1)) / (4*b);
-//    SX q_fk = SX::horzcat({qw, qx, qy, qz});
-//
-//    tf::Quaternion quat_tf;
-//    quat_tf.setW(pose.orientation.w);
-//    quat_tf.setX(pose.orientation.x);
-//    quat_tf.setY(pose.orientation.y);
-//    quat_tf.setZ(pose.orientation.z);
-//    tf::Quaternion q_inv_tf = quat_tf.inverse();
-//
-//    SX q_inv_fk = SX::horzcat({q_inv_tf.getW(), q_inv_tf.getX(), q_inv_tf.getY(), q_inv_tf.getZ()});
-//
-//    SX rot = q_fk *q_inv_fk;
-//    SX rot_xyz = SX::horzcat({rot(1), rot(2), rot(3)});
+    SX b = sqrt(1 + fk_(0,0) + fk_(1,1) + fk_(2,2));
+    SX qw = 0.5*b;
+    SX qx = (fk_(2,1) - fk_(1,2)) / (4*b);
+    SX qy = (fk_(0,2) - fk_(2,0)) / (4*b);
+    SX qz = (fk_(1,0) - fk_(0,1)) / (4*b);
 
-//    // Calculate squared distance
-    SX dist = dot(p,p);
+    SX q = SX::horzcat({qw, qx, qy, qz});
 
+    SX e_w = SX::vertcat({qw - pose.orientation.w});
+    SX e_x = SX::vertcat({qx - pose.orientation.x});
+    SX e_y = SX::vertcat({qy - pose.orientation.y});
+    SX e_z = SX::vertcat({qz - pose.orientation.z});
+
+    tf::Quaternion q_tf;
+
+    q_tf.setW(pose.orientation.w);
+    q_tf.setX(pose.orientation.x);
+    q_tf.setY(pose.orientation.y);
+    q_tf.setZ(pose.orientation.z);
+
+
+
+    tf::Quaternion q_inv = q_tf.inverse();
+
+    SX q_inv_sx = SX::horzcat({q_inv.getW(), q_inv.getX(), q_inv.getY(), q_inv.getZ()});
+
+
+    SX qd = SX::horzcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
+
+    SX q_rel = q_inv_sx * q;
+
+    SX quat_barrier = dot(e_w,e_w) + dot(e_x,e_x) + dot(e_y,e_y) + dot(e_z,e_z);
+
+    SX phi = atan2(2*(qw*qx + qx*qy),1-2*(qx*qx + qy*qy));
+    SX t2 = asin(2*(qw*qy - qz * qx));
+    SX theta = asin(tanh(100*t2)*t2);
+    SX psi = atan2(2*(qw*qz + qx*qy),(1-2*(qx*qx + qz*qz)));
+
+    SX x_rot = SX::horzcat({phi, theta, psi});
+
+    // Prevent collision with Base_link
     SX barrier;
+    // Position vector of end-effector
+    SX p = SX::horzcat({fk_(0,3), fk_(1,3), fk_(2,3)});
+    SX dist = dot(p,p);
     barrier = exp((min_dist - sqrt(dist))/0.01);
+
+    // Prevent collision of End-effector with floor
+    SX barrier_floor;
+    barrier_floor = exp((0.2 - sqrt(dot(p(2),p(2))))/0.01);
+
+    // Constraint prevents collision of Link 4 with the floor
+    SX barrier_link4;
+    SX p_l4 = SX::horzcat({fk_link4_(0,3), fk_link4_(1,3), fk_link4_(2,3)});
+    SX obstacle = SX::horzcat({0,0,1});
+    SX dist_l4 = dot(p - obstacle,p - obstacle);
+    barrier_link4 = exp((0.4- sqrt(dist_l4))/0.01);
 
     // Desired endeffector pose
     KDL::Frame frame;
     tf::poseMsgToKDL(pose, frame);
 
-    double roll, pitch, yaw;
-    frame.M.GetRPY(roll, pitch, yaw);
-    ROS_WARN_STREAM("rpy: " << roll << ", " << pitch << ", " << yaw);
+    double phi_d, theta_d, psi_d;
+    frame.M.GetRPY(phi_d, theta_d, psi_d);
 
     SX x_desired = SX::horzcat({pose.position.x, pose.position.y, pose.position.z});
+    SX x_rot_desired = SX::horzcat({phi_d, theta_d, psi_d});
 
+    SX R = 0*SX::vertcat({1, 1, 1, 1, 1, 1, 1});
 
-    SX x_rot_desired = SX::horzcat({roll, pitch, yaw});
+    SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
 
-    SX R = 10 * SX::vertcat({1, 1, 1, 1, 1, 1, 1});
-
-    SX energy = dot(dot(u_,sqrt(R)), dot(u_,sqrt(R)));
     // Objective function
-    SX L = dot(p - x_desired,p - x_desired)  + dot(x_rot - x_rot_desired, x_rot - x_rot_desired); // + barrier;
+    SX L = dot(p - x_desired,p - x_desired)+ barrier + barrier_floor + energy; // + dot(x_rot - x_rot_desired,x_rot - x_rot_desired);//  + dot(x_rot - x_rot_desired, x_rot - x_rot_desired);
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -447,7 +480,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     Dict opts;
 
     opts["ipopt.tol"] = 1e-5;
-    opts["ipopt.max_iter"] = 100;
+    opts["ipopt.max_iter"] = 20;
 //    opts["ipopt.hessian_approximation"] = "limited-memory";
 //    opts["ipopt.linear_solver"] = "mumps";
     opts["ipopt.print_level"] = 0;
@@ -488,6 +521,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     for(int i=0; i < control_dim_; ++i)
     {
         u_init_.push_back( q_dot(i) );
+//        u_init_.push_back(V_opt.at(state_dim_ + control_dim_ + i));
     }
 //    u_init_.push_back(0);   // Not optimized
 
@@ -501,6 +535,15 @@ Function CobNonlinearMPC::create_integrator(const unsigned int state_dim, const 
     double dt = T/((double)N);
 
     Function f = Function("f", {x, u}, {ode, L});
+//
+//    f.generate("f");
+//
+//    // Compile the C-code to a shared library
+//    string compile_command = "gcc -fPIC -shared -O3 f.c -o f.so";
+//    int flag = system(compile_command.c_str());
+//    casadi_assert_message(flag==0, "Compilation failed");
+//
+//    Function f_ext = external("f");
 
     MX X0 = MX::sym("X0", state_dim);
     MX U_ = MX::sym("U",control_dim);
