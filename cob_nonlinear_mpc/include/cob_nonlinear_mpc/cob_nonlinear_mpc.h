@@ -70,6 +70,7 @@ private:
     DH dh_param;
     std::vector<DH> dh_params;
     std::vector<SX> transformation_vector;
+    std::vector<SX> transformation_vector_dual_quat_;
 
     int state_dim_;
     int control_dim_;
@@ -81,6 +82,8 @@ private:
     SX x_;
     SX fk_;
     SX fk_link4_;
+
+    SX fk_dual_quat_;
     SX p_;
     tf::TransformListener tf_listener_;
 
@@ -124,7 +127,8 @@ public:
     Function create_integrator(const unsigned int state_dim, const unsigned int control_dim, const double T,
                                const unsigned int N, SX ode, SX x, SX u, SX L);
 
-
+    SX quaternion_product(SX q1, SX q2);
+    SX dual_quaternion_product(SX q1, SX q2);
 };
 
 

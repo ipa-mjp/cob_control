@@ -158,18 +158,34 @@ bool CobNonlinearMPC::initialize()
         T(2,0) = 0         ; T(2,1) = sin(alpha)              ; T(2,2) = cos(alpha)              ; T(2,3) = d;
         T(3,0) = 0         ; T(3,1) = 0                       ; T(3,2) = 0                       ; T(3,3) = 1;
 
+        SX T_dual_quat = SX::sym("T",8);
+        T_dual_quat(0) = cos(alpha/2) * cos(theta/2);
+        T_dual_quat(1) = sin(alpha/2) * cos(theta/2);
+        T_dual_quat(2) = sin(alpha/2) * sin(theta/2);
+        T_dual_quat(3) = cos(alpha/2) * sin(theta/2);
+        T_dual_quat(4) = -a/2 * sin(alpha/2) * cos(theta/2) - d/2 * cos(alpha/2) * sin(theta/2);
+        T_dual_quat(5) =  a/2 * cos(alpha/2) * cos(theta/2) - d/2 * sin(alpha/2) * sin(theta/2);
+        T_dual_quat(6) =  a/2 * cos(alpha/2) * sin(theta/2) + d/2 * sin(alpha/2) * cos(theta/2);
+        T_dual_quat(7) = -a/2 * sin(alpha/2) * sin(theta/2) + d/2 * cos(alpha/2) * cos(theta/2);
+
+
         transformation_vector.push_back(T);
+        transformation_vector_dual_quat_.push_back(T_dual_quat);
     }
+    ROS_WARN_STREAM("Finished");
 
     for(int i=0; i< transformation_vector.size(); i++)
     {
         if(i==0)
         {
             fk_ = transformation_vector.at(i);
+            fk_dual_quat_ = transformation_vector_dual_quat_.at(i);
+
         }
         else
         {
             fk_ = mtimes(fk_,transformation_vector.at(i));
+            fk_dual_quat_ = dual_quaternion_product(fk_dual_quat_, transformation_vector_dual_quat_.at(i));
         }
     }
 
@@ -325,81 +341,68 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     // ODE right hand side and quadrature
     SX qdot = SX::vertcat({u_});
 
-//    // Quaternion
-    SX b = sqrt(1 + fk_(0,0) + fk_(1,1) + fk_(2,2));
-    SX qw = 0.5*b;
-    SX qx = (fk_(2,1) - fk_(1,2)) / (4*b);
-    SX qy = (fk_(0,2) - fk_(2,0)) / (4*b);
-    SX qz = (fk_(1,0) - fk_(0,1)) / (4*b);
+    // Current Quaternion and Position Vector.
+    double kappa = 0.001; // Small regulation term for numerical stability for the NLP
+    SX q_c = SX::vertcat({
+        0.5 * sqrt(fk_(0,0) + fk_(1,1) + fk_(2,2) + 1.0 + kappa),
+        0.5 * (sign((fk_(2,1) - fk_(1,2)))) * sqrt(fk_(0,0) - fk_(1,1) - fk_(2,2) + 1.0 + kappa),
+        0.5 * (sign((fk_(0,2) - fk_(2,0)))) * sqrt(fk_(1,1) - fk_(2,2) - fk_(0,0) + 1.0 + kappa),
+        0.5 * (sign((fk_(1,0) - fk_(0,1)))) * sqrt(fk_(2,2) - fk_(0,0) - fk_(1,1) + 1.0 + kappa)
+    });
 
-    SX q = SX::horzcat({qw, qx, qy, qz});
+    SX p_c = SX::vertcat({fk_(0,3), fk_(1,3), fk_(2,3)});
 
-    SX e_w = SX::vertcat({qw - pose.orientation.w});
-    SX e_x = SX::vertcat({qx - pose.orientation.x});
-    SX e_y = SX::vertcat({qy - pose.orientation.y});
-    SX e_z = SX::vertcat({qz - pose.orientation.z});
-
-    tf::Quaternion q_tf;
-
-    q_tf.setW(pose.orientation.w);
-    q_tf.setX(pose.orientation.x);
-    q_tf.setY(pose.orientation.y);
-    q_tf.setZ(pose.orientation.z);
+    // Desired Goal-pose
+    SX x_d = SX::vertcat({pose.position.x, pose.position.y, pose.position.z});
+    SX q_d = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
 
 
 
-    tf::Quaternion q_inv = q_tf.inverse();
-
-    SX q_inv_sx = SX::horzcat({q_inv.getW(), q_inv.getX(), q_inv.getY(), q_inv.getZ()});
-
-
-    SX qd = SX::horzcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
-
-    SX q_rel = q_inv_sx * q;
-
-    SX quat_barrier = dot(e_w,e_w) + dot(e_x,e_x) + dot(e_y,e_y) + dot(e_z,e_z);
-
-    SX phi = atan2(2*(qw*qx + qx*qy),1-2*(qx*qx + qy*qy));
-    SX t2 = asin(2*(qw*qy - qz * qx));
-    SX theta = asin(tanh(100*t2)*t2);
-    SX psi = atan2(2*(qw*qz + qx*qy),(1-2*(qx*qx + qz*qz)));
-
-    SX x_rot = SX::horzcat({phi, theta, psi});
 
     // Prevent collision with Base_link
     SX barrier;
-    // Position vector of end-effector
-    SX p = SX::horzcat({fk_(0,3), fk_(1,3), fk_(2,3)});
-    SX dist = dot(p,p);
+
+    SX dist = dot(p_c,p_c);
     barrier = exp((min_dist - sqrt(dist))/0.01);
 
     // Prevent collision of End-effector with floor
     SX barrier_floor;
-    barrier_floor = exp((0.2 - sqrt(dot(p(2),p(2))))/0.01);
+    barrier_floor = exp((0.2 - sqrt(dot(p_c(2),p_c(2))))/0.01);
 
     // Constraint prevents collision of Link 4 with the floor
     SX barrier_link4;
-    SX p_l4 = SX::horzcat({fk_link4_(0,3), fk_link4_(1,3), fk_link4_(2,3)});
-    SX obstacle = SX::horzcat({0,0,1});
-    SX dist_l4 = dot(p - obstacle,p - obstacle);
+    SX p_l4 = SX::vertcat({fk_link4_(0,3), fk_link4_(1,3), fk_link4_(2,3)});
+    SX obstacle = SX::vertcat({0,0,1});
+    SX dist_l4 = dot(p_c - obstacle,p_c - obstacle);
     barrier_link4 = exp((0.4- sqrt(dist_l4))/0.01);
 
-    // Desired endeffector pose
-    KDL::Frame frame;
-    tf::poseMsgToKDL(pose, frame);
 
-    double phi_d, theta_d, psi_d;
-    frame.M.GetRPY(phi_d, theta_d, psi_d);
 
-    SX x_desired = SX::horzcat({pose.position.x, pose.position.y, pose.position.z});
-    SX x_rot_desired = SX::horzcat({phi_d, theta_d, psi_d});
+    SX R = 0.005*SX::vertcat({1, 1, 1, 1, 1, 1, 1});
 
-    SX R = 0*SX::vertcat({1, 1, 1, 1, 1, 1, 1});
+
+
+//    // Objective function
+//    SX position = SX::vertcat({1,0,0,0,0,0,0,0});
+//
+//    SX p_ee = dual_quaternion_product(fk_dual_quat_, position);
+//
+//    // Dual conjugate of dual quaternion conjugate
+//    SX fk_dual_conjugate = SX::vertcat({fk_dual_quat_(0), fk_dual_quat_(1), fk_dual_quat_(2), fk_dual_quat_(3),
+//                                        -fk_dual_quat_(4), fk_dual_quat_(5), fk_dual_quat_(6), fk_dual_quat_(7)});
+//    // Dual quaternion conjugate
+////    SX fk_dual_conjugate = SX::vertcat({fk_dual_quat_(0), -fk_dual_quat_(1), -fk_dual_quat_(2), -fk_dual_quat_(3),
+////                                        fk_dual_quat_(4), -fk_dual_quat_(5), -fk_dual_quat_(6), -fk_dual_quat_(7)});
+//
+////    SX fk_dual_conjugate = SX::vertcat({fk_dual_quat_(0), -fk_dual_quat_(1), -fk_dual_quat_(2), -fk_dual_quat_(3),
+////                                        -fk_dual_quat_(4), fk_dual_quat_(5), fk_dual_quat_(6), fk_dual_quat_(7)});
+//    p_ee = dual_quaternion_product(p_ee,fk_dual_conjugate);
+//    SX pos1 = SX::vertcat({p_ee(5), p_ee(6), p_ee(7)});
+//    SX dual_barrier = dot(q_d(0) - p_ee(0),q_d(0) - p_ee(0)) + dot(q_d(1) - p_ee(1),q_d(1) - p_ee(1)) + dot(q_d(2) - p_ee(2),q_d(2) - p_ee(2)) + dot(q_d(3) - p_ee(3),q_d(3) - p_ee(3));
+
 
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
-
-    // Objective function
-    SX L = dot(p - x_desired,p - x_desired)+ barrier + barrier_floor + energy; // + dot(x_rot - x_rot_desired,x_rot - x_rot_desired);//  + dot(x_rot - x_rot_desired, x_rot - x_rot_desired);
+    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 0.5 * dot(q_c - q_d, q_c - q_d) + energy + barrier;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -560,4 +563,41 @@ Function CobNonlinearMPC::create_integrator(const unsigned int state_dim, const 
     Q = Q + dt * Q_new;
 
     return Function("F", {X0, U_}, {X_, Q}, {"x0","p"}, {"xf", "qf"});
+}
+
+
+SX CobNonlinearMPC::dual_quaternion_product(SX q1, SX q2)
+{
+    SX q1_real = SX::vertcat({q1(0),q1(1),q1(2),q1(3)});
+    SX q1_dual = SX::vertcat({q1(4),q1(5),q1(6),q1(7)});
+    SX q2_real = SX::vertcat({q2(0),q2(1),q2(2),q2(3)});
+    SX q2_dual = SX::vertcat({q2(4),q2(5),q2(6),q2(7)});
+
+    SX q1q2_real = quaternion_product(q1_real,q2_real);
+    SX q1_real_q2_dual = quaternion_product(q1_real,q2_dual);
+    SX q1_dual_q2_real = quaternion_product(q1_dual,q2_real);
+
+    SX q_prod = SX::vertcat({
+        q1q2_real,
+        q1_real_q2_dual + q1_dual_q2_real
+    });
+
+    return q_prod;
+}
+
+SX CobNonlinearMPC::quaternion_product(SX q1, SX q2)
+{
+    SX q1_v = SX::vertcat({q1(1),q1(2),q1(3)});
+    SX q2_v = SX::vertcat({q2(1),q2(2),q2(3)});
+
+    SX c = SX::cross(q1_v,q2_v);
+
+    SX q_new = SX::vertcat({
+        q1(0) * q2(0) - dot(q1_v,q2_v),
+        q1(0) * q2(1) + q2(0) * q1(1) + c(0),
+        q1(0) * q2(2) + q2(0) * q1(2) + c(1),
+        q1(0) * q2(3) + q2(0) * q1(3) + c(2)
+    });
+
+    return q_new;
 }
