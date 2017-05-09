@@ -44,6 +44,7 @@
 
 #include <tf/transform_listener.h>
 #include <tf/tf.h>
+#include <visualization_msgs/MarkerArray.h>
 
 #include <ctime>
 #include <casadi/casadi.hpp>
@@ -61,6 +62,14 @@ struct DH
     std::string theta;
 };
 
+struct T_BVH
+{
+    SX T;
+    SX BVH_p;
+
+    bool constraint = false;
+};
+
 
 class CobNonlinearMPC
 {
@@ -69,13 +78,18 @@ private:
     std::vector<std::string> transformation_names_;
     DH dh_param;
     std::vector<DH> dh_params;
-    std::vector<SX> transformation_vector;
     std::vector<SX> transformation_vector_dual_quat_;
+
+    std::vector<SX> bvh_points_;
+
+    std::vector<T_BVH> transform_vec_bvh_;
 
     int state_dim_;
     int control_dim_;
     int num_shooting_nodes_;
     double time_horizon_;
+
+    visualization_msgs::MarkerArray marker_array_;
 
     // Declare variables
     SX u_;
@@ -98,6 +112,7 @@ private:
 
     ros::Publisher base_vel_pub_;
     ros::Publisher pub_;
+    ros::Publisher marker_pub_;
 
     KDL::JntArray joint_state_;
     KDL::JntArray odometry_state_;
@@ -109,6 +124,7 @@ public:
     {
 //            u_init_ = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
         u_init_ = { 0, 0, 0, 0, 0, 0, 0 };
+        marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("nmpc/bvh", 1);
     }
     ~CobNonlinearMPC(){}
 
@@ -126,6 +142,8 @@ public:
 
     Function create_integrator(const unsigned int state_dim, const unsigned int control_dim, const double T,
                                const unsigned int N, SX ode, SX x, SX u, SX L);
+
+    void visualizeBVH(const geometry_msgs::Point point, double radius);
 
     SX quaternion_product(SX q1, SX q2);
     SX dual_quaternion_product(SX q1, SX q2);

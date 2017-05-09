@@ -39,6 +39,7 @@
 #include <cob_srvs/SetString.h>
 
 #include <Eigen/Dense>
+#include <casadi/core/function/sx_function.hpp>
 
 bool CobNonlinearMPC::initialize()
 {
@@ -169,22 +170,45 @@ bool CobNonlinearMPC::initialize()
         T_dual_quat(7) = -a/2 * sin(alpha/2) * sin(theta/2) + d/2 * cos(alpha/2) * cos(theta/2);
 
 
-        transformation_vector.push_back(T);
+        T_BVH p;
+
+        // Calculate BVH points
+        if(d > 0)
+        {
+            SX T_point = SX::sym("point", 4,4);
+            T_point(0,0) = 0; T_point(0,1) = 0; T_point(0,2) = 0; T_point(0,3) = 0;
+            T_point(1,0) = 0; T_point(1,1) = 0; T_point(1,2) = 0; T_point(1,3) = 0;
+            T_point(2,0) = 0; T_point(2,1) = 0; T_point(2,2) = 0; T_point(2,3) = d/2;
+            T_point(3,0) = 0; T_point(3,1) = 0; T_point(3,2) = 0; T_point(3,3) = 1;
+            p.BVH_p = T_point;
+            p.constraint = true;
+        }
+        p.T = T;
+
+        transform_vec_bvh_.push_back(p);
+
         transformation_vector_dual_quat_.push_back(T_dual_quat);
     }
     ROS_WARN_STREAM("Finished");
 
-    for(int i=0; i< transformation_vector.size(); i++)
+    // Get Endeffector FK
+    for(int i=0; i< transform_vec_bvh_.size(); i++)
     {
         if(i==0)
         {
-            fk_ = transformation_vector.at(i);
+            fk_ = transform_vec_bvh_.at(i).T;
             fk_dual_quat_ = transformation_vector_dual_quat_.at(i);
 
         }
         else
         {
-            fk_ = mtimes(fk_,transformation_vector.at(i));
+            if(transform_vec_bvh_.at(i).constraint)
+            {
+                SX T_point = mtimes(fk_,transform_vec_bvh_.at(i).BVH_p);
+                SX T_pos = SX::vertcat({T_point(0,3),T_point(1,3),T_point(2,3)});
+                bvh_points_.push_back(T_pos);
+            }
+            fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
             fk_dual_quat_ = dual_quaternion_product(fk_dual_quat_, transformation_vector_dual_quat_.at(i));
         }
     }
@@ -193,16 +217,13 @@ bool CobNonlinearMPC::initialize()
     {
         if(i==0)
         {
-            fk_link4_ = transformation_vector.at(i);
+            fk_link4_ = transform_vec_bvh_.at(i).T;
         }
         else
         {
-            fk_link4_ = mtimes(fk_,transformation_vector.at(i));
+            fk_link4_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
         }
     }
-
-
-
 
     joint_state_ = KDL::JntArray(7);
     odometry_state_ = KDL::JntArray(3);
@@ -365,22 +386,15 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX dist = dot(p_c,p_c);
     barrier = exp((min_dist - sqrt(dist))/0.01);
 
-    // Prevent collision of End-effector with floor
-    SX barrier_floor;
-    barrier_floor = exp((0.2 - sqrt(dot(p_c(2),p_c(2))))/0.01);
+    SX BVH_barrier;
 
-    // Constraint prevents collision of Link 4 with the floor
-    SX barrier_link4;
-    SX p_l4 = SX::vertcat({fk_link4_(0,3), fk_link4_(1,3), fk_link4_(2,3)});
-    SX obstacle = SX::vertcat({0,0,1});
-    SX dist_l4 = dot(p_c - obstacle,p_c - obstacle);
-    barrier_link4 = exp((0.4- sqrt(dist_l4))/0.01);
-
-
+    for(int i = 0; i < bvh_points_.size(); i++)
+    {
+        dist = dot(bvh_points_.at(i) - p_c,bvh_points_.at(i) - p_c);
+        barrier += exp((min_dist - sqrt(dist))/0.01);
+    }
 
     SX R = 0.005*SX::vertcat({1, 1, 1, 1, 1, 1, 1});
-
-
 
 //    // Objective function
 //    SX position = SX::vertcat({1,0,0,0,0,0,0,0});
@@ -402,10 +416,26 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
 
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
-    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 0.5 * dot(q_c - q_d, q_c - q_d) + energy + barrier;
+    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10 * dot(q_c - q_d, q_c - q_d) + energy + barrier;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
+
+//    // Generate C-code
+//    F.generate("nmpc");
+//
+//    Importer("nmpc.c","clang");
+//
+//    // Compile the C-code to a shared library
+//    string compile_command = "gcc -fPIC -shared -O3 nmpc.c -o nmpc.so";
+//    int flag = system(compile_command.c_str());
+//    casadi_assert_message(flag==0, "Compilation failed");
+//
+////
+//    // Use CasADi's "external" to load the compiled function
+//    F = external("nmpc");
+//
+//    F = external("F", "./nmpc.so");
 
     // Total number of NLP variables
     int NV = state_dim_*(num_shooting_nodes_+1) + control_dim_*num_shooting_nodes_;
@@ -485,9 +515,11 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     opts["ipopt.tol"] = 1e-5;
     opts["ipopt.max_iter"] = 20;
 //    opts["ipopt.hessian_approximation"] = "limited-memory";
-//    opts["ipopt.linear_solver"] = "mumps";
+//    opts["ipopt.hessian_constant"] = "yes";
+    opts["ipopt.linear_solver"] = "ma27";
     opts["ipopt.print_level"] = 0;
     opts["print_time"] = true;
+    opts["expand"] = true;  // Removes overhead, not sure if this command does the same as in the create_integrator function !
 
     // Create an NLP solver and buffers
     Function solver = nlpsol("nlpsol", "ipopt", nlp, opts);
@@ -510,6 +542,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     // Get the optimal control
     Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(state_dim_);
+    Eigen::VectorXd x_new = Eigen::VectorXd::Zero(state_dim_);
     u_init_.clear();
 
     for(int i=0; i<1; ++i)  // Copy only the first optimal control sequence
@@ -517,6 +550,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         for(int j=0; j<control_dim_; ++j)
         {
             q_dot[j] = V_opt.at(state_dim_ + j);
+            x_new[j] = V_opt.at(j);
         }
     }
 
@@ -526,8 +560,6 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         u_init_.push_back( q_dot(i) );
 //        u_init_.push_back(V_opt.at(state_dim_ + control_dim_ + i));
     }
-//    u_init_.push_back(0);   // Not optimized
-
     return q_dot;
 }
 
@@ -562,7 +594,8 @@ Function CobNonlinearMPC::create_integrator(const unsigned int state_dim, const 
     X_= X_+ dt * qdot_new;
     Q = Q + dt * Q_new;
 
-    return Function("F", {X0, U_}, {X_, Q}, {"x0","p"}, {"xf", "qf"});
+    Function F = Function("F", {X0, U_}, {X_, Q}, {"x0","p"}, {"xf", "qf"});
+    return F.expand("F");   // Remove overhead
 }
 
 
@@ -600,4 +633,32 @@ SX CobNonlinearMPC::quaternion_product(SX q1, SX q2)
     });
 
     return q_new;
+}
+
+
+void CobNonlinearMPC::visualizeBVH(const geometry_msgs::Point point, double radius)
+{
+    visualization_msgs::Marker marker;
+    marker.type = visualization_msgs::Marker::SPHERE;
+    marker.lifetime = ros::Duration();
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.ns = "preview";
+    marker.scale.x = 0.01;
+    marker.scale.y = 0.01;
+    marker.scale.z = 0.01;
+    marker.color.r = 1.0;
+    marker.color.g = 0.0;
+    marker.color.b = 1.0;
+    marker.color.a = 1.0;
+
+    // clear marker_array_ to only show preview of current path
+    marker_array_.markers.clear();
+
+//    marker.id = id + i;
+//    marker.pose = pose_array.poses.at(i);
+//    marker_array_.markers.push_back(marker);
+
+    double id = marker_array_.markers.size();
+
+    marker_pub_.publish(marker_array_);
 }
