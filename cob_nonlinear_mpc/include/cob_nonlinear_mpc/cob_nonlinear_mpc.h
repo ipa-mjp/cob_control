@@ -143,7 +143,7 @@ public:
     Function create_integrator(const unsigned int state_dim, const unsigned int control_dim, const double T,
                                const unsigned int N, SX ode, SX x, SX u, SX L);
 
-    void visualizeBVH(const geometry_msgs::Point point, double radius);
+    void visualizeBVH(const geometry_msgs::Point point, double radius, int id);
 
     SX quaternion_product(SX q1, SX q2);
     SX dual_quaternion_product(SX q1, SX q2);

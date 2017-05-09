@@ -338,7 +338,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
                                           const KDL::JntArray& state)
 {
     // Distance to obstacle
-    double min_dist = 0.2;
+    double min_dist = 0.3;
 
     // Bounds and initial guess for the control
     vector<double> u_min =  input_constraints_min_;
@@ -542,24 +542,46 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     // Get the optimal control
     Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(state_dim_);
-    Eigen::VectorXd x_new = Eigen::VectorXd::Zero(state_dim_);
+//    Eigen::VectorXd x_new = Eigen::VectorXd::Zero(state_dim_);
+    vector<double> x_new;
+    SX sx_x_new;
     u_init_.clear();
+    x_new.clear();
 
     for(int i=0; i<1; ++i)  // Copy only the first optimal control sequence
     {
         for(int j=0; j<control_dim_; ++j)
         {
             q_dot[j] = V_opt.at(state_dim_ + j);
-            x_new[j] = V_opt.at(j);
+            x_new.push_back(V_opt.at(j));
         }
     }
 
+    sx_x_new = SX::vertcat({x_new});
     // Safe optimal control sequence at time t_k and take it as inital guess at t_k+1
     for(int i=0; i < control_dim_; ++i)
     {
         u_init_.push_back( q_dot(i) );
 //        u_init_.push_back(V_opt.at(state_dim_ + control_dim_ + i));
     }
+
+    geometry_msgs::Point point;
+    point.x = 0;
+    point.y = 0;
+    point.z = 0;
+
+    for(int i = 0; i < bvh_points_.size(); i++)
+    {
+        Function fk_sx = Function("fk_sx", {x_}, {bvh_points_.at(i)});
+        SX result = fk_sx(sx_x_new).at(0);
+
+        point.x = (double)result(0);
+        point.y = (double)result(1);
+        point.z = (double)result(2);
+
+        visualizeBVH(point, min_dist, i);
+    }
+
     return q_dot;
 }
 
@@ -636,29 +658,32 @@ SX CobNonlinearMPC::quaternion_product(SX q1, SX q2)
 }
 
 
-void CobNonlinearMPC::visualizeBVH(const geometry_msgs::Point point, double radius)
+void CobNonlinearMPC::visualizeBVH(const geometry_msgs::Point point, double radius, int id)
 {
     visualization_msgs::Marker marker;
     marker.type = visualization_msgs::Marker::SPHERE;
     marker.lifetime = ros::Duration();
     marker.action = visualization_msgs::Marker::ADD;
     marker.ns = "preview";
-    marker.scale.x = 0.01;
-    marker.scale.y = 0.01;
-    marker.scale.z = 0.01;
+    marker.header.frame_id = "world";
+
+
+    marker.scale.x = 2*radius;
+    marker.scale.y = 2*radius;
+    marker.scale.z = 2*radius;
+
     marker.color.r = 1.0;
     marker.color.g = 0.0;
-    marker.color.b = 1.0;
-    marker.color.a = 1.0;
+    marker.color.b = 0.0;
+    marker.color.a = 0.5;
 
-    // clear marker_array_ to only show preview of current path
     marker_array_.markers.clear();
 
-//    marker.id = id + i;
-//    marker.pose = pose_array.poses.at(i);
-//    marker_array_.markers.push_back(marker);
-
-    double id = marker_array_.markers.size();
+    marker.id = id;
+    marker.pose.position.x = point.x;
+    marker.pose.position.y = point.y;
+    marker.pose.position.z = point.z;
+    marker_array_.markers.push_back(marker);
 
     marker_pub_.publish(marker_array_);
 }
