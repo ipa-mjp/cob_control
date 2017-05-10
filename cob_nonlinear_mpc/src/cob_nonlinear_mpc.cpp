@@ -208,6 +208,12 @@ bool CobNonlinearMPC::initialize()
                 SX T_pos = SX::vertcat({T_point(0,3),T_point(1,3),T_point(2,3)});
                 bvh_points_.push_back(T_pos);
             }
+            else
+            {
+                SX T_point = mtimes(fk_,transform_vec_bvh_.at(i).T);
+                SX T_pos = SX::vertcat({T_point(0,3),T_point(1,3),T_point(2,3)});
+                bvh_points_.push_back(T_pos);
+            }
             fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
             fk_dual_quat_ = dual_quaternion_product(fk_dual_quat_, transformation_vector_dual_quat_.at(i));
         }
@@ -338,7 +344,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
                                           const KDL::JntArray& state)
 {
     // Distance to obstacle
-    double min_dist = 0.3;
+    double min_dist = 0.15;
 
     // Bounds and initial guess for the control
     vector<double> u_min =  input_constraints_min_;
@@ -393,6 +399,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         dist = dot(bvh_points_.at(i) - p_c,bvh_points_.at(i) - p_c);
         barrier += exp((min_dist - sqrt(dist))/0.01);
     }
+    ROS_WARN_STREAM("Constraint Balls: " << bvh_points_.size());
 
     SX R = 0.005*SX::vertcat({1, 1, 1, 1, 1, 1, 1});
 
@@ -675,7 +682,7 @@ void CobNonlinearMPC::visualizeBVH(const geometry_msgs::Point point, double radi
     marker.color.r = 1.0;
     marker.color.g = 0.0;
     marker.color.b = 0.0;
-    marker.color.a = 0.5;
+    marker.color.a = 0.1;
 
     marker_array_.markers.clear();
 
