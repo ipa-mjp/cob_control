@@ -77,14 +77,18 @@ class CobNonlinearMPC
 private:
     ros::NodeHandle nh_;
     std::vector<std::string> transformation_names_;
+    std::vector<std::string> transformation_names_base_;
+
     DH dh_param;
     std::vector<DH> dh_params;
+    std::vector<DH> dh_params_base_;
+
     std::vector<SX> transformation_vector_dual_quat_;
 
     std::vector<SX> bvh_points_;
 
     std::vector<T_BVH> transform_vec_bvh_;
-
+    std::vector<SX> transform_base_vec_;
     int state_dim_;
     int control_dim_;
     int num_shooting_nodes_;
@@ -97,6 +101,8 @@ private:
     SX x_;
     SX fk_;
     SX fk_link4_;
+
+    SX fk_base_;
 
     SX fk_dual_quat_;
     SX p_;
@@ -118,6 +124,8 @@ private:
     KDL::JntArray joint_state_;
     KDL::JntArray odometry_state_;
     vector<double> u_init_;
+
+    bool base_active_;
 
 
 public:

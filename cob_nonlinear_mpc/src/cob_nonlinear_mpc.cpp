@@ -46,6 +46,7 @@ bool CobNonlinearMPC::initialize()
 {
     ros::NodeHandle nh_nmpc("nmpc");
     ros::NodeHandle nh_nmpc_dh("nmpc/dh");
+    ros::NodeHandle nh_nmpc_base_dh("nmpc/base/dh");
     ros::NodeHandle nh_nmpc_constraints("nmpc/constraints");
 
 
@@ -76,6 +77,16 @@ bool CobNonlinearMPC::initialize()
     if (!nh_nmpc.getParam("control_dim", control_dim_))
     {
         ROS_ERROR("Parameter 'control_dim' not set");
+        return false;
+    }
+    if (!nh_nmpc.getParam("base/base_active", base_active_))
+    {
+        ROS_ERROR("Parameter 'base/base_active' not set");
+        return false;
+    }
+    if (!nh_nmpc.getParam("base/transformations", transformation_names_base_))
+    {
+        ROS_ERROR("Parameter 'base/transformations' not set");
         return false;
     }
 
@@ -112,6 +123,46 @@ bool CobNonlinearMPC::initialize()
         ROS_ERROR("Parameter 'input/input_constraints/max' not set");
         return false;
     }
+
+    if(base_active_)
+    {
+        for(unsigned int i = 0; i < transformation_names_base_.size(); i++)
+        {
+            DH param;
+
+            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/type", param.type))
+            {
+                ROS_ERROR("Parameter 'type' not set");
+                return false;
+            }
+
+            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/theta", param.theta))
+            {
+                ROS_ERROR("Parameter 'theta' not set");
+                return false;
+            }
+            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/d", param.d))
+            {
+                ROS_ERROR("Parameter 'd' not set");
+                return false;
+            }
+
+            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/a", param.a))
+            {
+                ROS_ERROR("Parameter 'a' not set");
+                return false;
+            }
+
+            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/alpha", param.alpha))
+            {
+                ROS_ERROR("Parameter 'alpha' not set");
+                return false;
+            }
+
+            dh_params_base_.push_back(param);
+        }
+    }
+
 
     // nh_nmpc_dh
     for(unsigned int i = 0; i < transformation_names_.size(); i++)
@@ -155,6 +206,7 @@ bool CobNonlinearMPC::initialize()
     x_ = SX::sym("x", control_dim_); // states
 
 
+    // Set up Transformation matrices for the arm
     for(int i=0; i< dh_params.size(); i++)
     {
         SX T = SX::sym("T",4,4);
@@ -207,28 +259,55 @@ bool CobNonlinearMPC::initialize()
         transform_vec_bvh_.push_back(p);
     }
 
+    // Set up Transformation matrices for the base
+    SX T = SX::sym("T",4,4);
+    double a = dh_params_base_.at(2).a;
+    double alpha = dh_params_base_.at(2).alpha;
+    double d = std::stod(dh_params_base_.at(2).d);
+    SX theta = x_(2);
+
+    T(0,0) = cos(theta); T(0,1) = -sin(theta); T(0,2) = 0; T(0,3) = x_(0);
+    T(1,0) = sin(theta); T(1,1) = cos(theta) ; T(1,2) = 0; T(1,3) = x_(1);
+    T(2,0) = 0         ; T(2,1) = 0          ; T(2,2) = 1; T(2,3) = d;
+    T(3,0) = 0         ; T(3,1) = 0          ; T(3,2) = 0; T(3,3) = 1;
+    fk_base_ = T;
+
     // Get Endeffector FK
     for(int i=0; i< transform_vec_bvh_.size(); i++)
     {
-        if(i==0)
+        if(base_active_)
         {
-            fk_ = transform_vec_bvh_.at(i).T;
+            if(i==0)
+            {
+                fk_ = mtimes(fk_base_,transform_vec_bvh_.at(i).T);
+            }
+            else
+            {
+    //            if(transform_vec_bvh_.at(i).constraint)
+    //            {
+    //                SX T_point = mtimes(fk_,transform_vec_bvh_.at(i).BVH_p);
+    //                SX T_pos = SX::vertcat({T_point(0,3),T_point(1,3),T_point(2,3)});
+    //                bvh_points_.push_back(T_pos);
+    //            }
+    //            else
+    //            {
+    //                SX T_point = mtimes(fk_,transform_vec_bvh_.at(i).T);
+    //                SX T_pos = SX::vertcat({T_point(0,3),T_point(1,3),T_point(2,3)});
+    //                bvh_points_.push_back(T_pos);
+    //            }
+                fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
+            }
         }
         else
         {
-//            if(transform_vec_bvh_.at(i).constraint)
-//            {
-//                SX T_point = mtimes(fk_,transform_vec_bvh_.at(i).BVH_p);
-//                SX T_pos = SX::vertcat({T_point(0,3),T_point(1,3),T_point(2,3)});
-//                bvh_points_.push_back(T_pos);
-//            }
-//            else
-//            {
-//                SX T_point = mtimes(fk_,transform_vec_bvh_.at(i).T);
-//                SX T_pos = SX::vertcat({T_point(0,3),T_point(1,3),T_point(2,3)});
-//                bvh_points_.push_back(T_pos);
-//            }
-            fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
+            if(i==0)
+            {
+                fk_ = transform_vec_bvh_.at(i).T;
+            }
+            else
+            {
+                fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
+            }
         }
     }
 
@@ -277,7 +356,6 @@ void CobNonlinearMPC::poseCallback(const geometry_msgs::Pose::ConstPtr& msg)
     base_vel_msg.angular.x = 0;
     base_vel_msg.angular.y = 0;
     base_vel_msg.angular.z = qdot(2);
-
 
     base_vel_pub_.publish(base_vel_msg);
 
@@ -419,7 +497,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX R = 0.005*SX::vertcat({1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
 
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
-    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10;// * dot(q_c - q_d, q_c - q_d) + energy;// + barrier;
+    SX L = 10 * dot(p_c-x_d,p_c-x_d);// + 10 * dot(q_c - q_d, q_c - q_d) + energy;// + barrier;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
