@@ -53,13 +53,14 @@ using namespace casadi;
 using namespace std;
 
 
-// Only for revolute joints!
 struct DH
 {
     double alpha;
     double a;
-    double d;
+    std::string d;
     std::string theta;
+
+    std::string type;
 };
 
 struct T_BVH
@@ -123,7 +124,6 @@ public:
     CobNonlinearMPC()
     {
 //            u_init_ = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-        u_init_ = { 0, 0, 0, 0, 0, 0, 0 };
         marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("nmpc/bvh", 1);
     }
     ~CobNonlinearMPC(){}
