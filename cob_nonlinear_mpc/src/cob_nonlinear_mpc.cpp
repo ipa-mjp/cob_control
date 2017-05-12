@@ -37,23 +37,21 @@
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <cob_srvs/SetString.h>
-#include <string>
+
 #include <Eigen/Dense>
 #include <casadi/core/function/sx_function.hpp>
-#include <stdlib.h>
 
 bool CobNonlinearMPC::initialize()
 {
     ros::NodeHandle nh_nmpc("nmpc");
     ros::NodeHandle nh_nmpc_dh("nmpc/dh");
-    ros::NodeHandle nh_nmpc_base_dh("nmpc/base/dh");
     ros::NodeHandle nh_nmpc_constraints("nmpc/constraints");
 
 
     // nh_nmpc
     if (!nh_nmpc.getParam("transformations", transformation_names_))
     {
-        ROS_ERROR("Parameter 'transformation_names' not set");
+        ROS_ERROR("Parameter 'num_transformations' not set");
         return false;
     }
 
@@ -71,22 +69,12 @@ bool CobNonlinearMPC::initialize()
 
     if (!nh_nmpc.getParam("state_dim", state_dim_))
     {
-        ROS_ERROR("Parameter 'state_dim' not set");
+        ROS_ERROR("Parameter 'num_transformations' not set");
         return false;
     }
     if (!nh_nmpc.getParam("control_dim", control_dim_))
     {
-        ROS_ERROR("Parameter 'control_dim' not set");
-        return false;
-    }
-    if (!nh_nmpc.getParam("base/base_active", base_active_))
-    {
-        ROS_ERROR("Parameter 'base/base_active' not set");
-        return false;
-    }
-    if (!nh_nmpc.getParam("base/transformations", transformation_names_base_))
-    {
-        ROS_ERROR("Parameter 'base/transformations' not set");
+        ROS_ERROR("Parameter 'num_transformations' not set");
         return false;
     }
 
@@ -124,60 +112,15 @@ bool CobNonlinearMPC::initialize()
         return false;
     }
 
-    if(base_active_)
-    {
-        for(unsigned int i = 0; i < transformation_names_base_.size(); i++)
-        {
-            DH param;
-
-            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/type", param.type))
-            {
-                ROS_ERROR("Parameter 'type' not set");
-                return false;
-            }
-
-            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/theta", param.theta))
-            {
-                ROS_ERROR("Parameter 'theta' not set");
-                return false;
-            }
-            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/d", param.d))
-            {
-                ROS_ERROR("Parameter 'd' not set");
-                return false;
-            }
-
-            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/a", param.a))
-            {
-                ROS_ERROR("Parameter 'a' not set");
-                return false;
-            }
-
-            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/alpha", param.alpha))
-            {
-                ROS_ERROR("Parameter 'alpha' not set");
-                return false;
-            }
-
-            dh_params_base_.push_back(param);
-        }
-    }
-
-
     // nh_nmpc_dh
     for(unsigned int i = 0; i < transformation_names_.size(); i++)
     {
         DH param;
 
-        if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/type", param.type))
+        std::string test = transformation_names_.at(i)+"/a";
+        if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/a", param.a))
         {
-            ROS_ERROR("Parameter 'type' not set");
-            return false;
-        }
-
-        if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/theta", param.theta))
-        {
-            ROS_ERROR("Parameter 'theta' not set");
+            ROS_ERROR("Parameter 'a' not set");
             return false;
         }
         if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/d", param.d))
@@ -185,16 +128,14 @@ bool CobNonlinearMPC::initialize()
             ROS_ERROR("Parameter 'd' not set");
             return false;
         }
-
-        if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/a", param.a))
-        {
-            ROS_ERROR("Parameter 'a' not set");
-            return false;
-        }
-
         if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/alpha", param.alpha))
         {
             ROS_ERROR("Parameter 'alpha' not set");
+            return false;
+        }
+        if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/theta", param.theta))
+        {
+            ROS_ERROR("Parameter 'theta' not set");
             return false;
         }
 
@@ -205,109 +146,76 @@ bool CobNonlinearMPC::initialize()
     u_ = SX::sym("u", state_dim_);  // control
     x_ = SX::sym("x", control_dim_); // states
 
-
-    // Set up Transformation matrices for the arm
     for(int i=0; i< dh_params.size(); i++)
     {
-        SX T = SX::sym("T",4,4);
+        SX theta = x_(i);
+        double d = dh_params.at(i).d;
         double a = dh_params.at(i).a;
         double alpha = dh_params.at(i).alpha;
 
-        if (dh_params.at(i).type == "r")
-        {
-            SX theta = x_(i);
-            double d = std::stod(dh_params.at(i).d);
+        SX T = SX::sym("T",4,4);
+        T(0,0) = cos(theta); T(0,1) = -sin(theta) * cos(alpha); T(0,2) = sin(theta) * sin(alpha) ; T(0,3) = a * cos(theta);
+        T(1,0) = sin(theta); T(1,1) = cos(theta) * cos(alpha) ; T(1,2) = -cos(theta) * sin(alpha); T(1,3) = a * sin(theta);
+        T(2,0) = 0         ; T(2,1) = sin(alpha)              ; T(2,2) = cos(alpha)              ; T(2,3) = d;
+        T(3,0) = 0         ; T(3,1) = 0                       ; T(3,2) = 0                       ; T(3,3) = 1;
 
-            T(0,0) = cos(theta); T(0,1) = -sin(theta) * cos(alpha); T(0,2) = sin(theta) * sin(alpha) ; T(0,3) = a * cos(theta);
-            T(1,0) = sin(theta); T(1,1) = cos(theta) * cos(alpha) ; T(1,2) = -cos(theta) * sin(alpha); T(1,3) = a * sin(theta);
-            T(2,0) = 0         ; T(2,1) = sin(alpha)              ; T(2,2) = cos(alpha)              ; T(2,3) = d;
-            T(3,0) = 0         ; T(3,1) = 0                       ; T(3,2) = 0                       ; T(3,3) = 1;
-        }
-        else if (dh_params.at(i).type == "p")
-        {
-            double theta = std::stod(dh_params.at(i).theta);
-            SX d = x_(i);
+        SX T_dual_quat = SX::sym("T",8);
+        T_dual_quat(0) = cos(alpha/2) * cos(theta/2);
+        T_dual_quat(1) = sin(alpha/2) * cos(theta/2);
+        T_dual_quat(2) = sin(alpha/2) * sin(theta/2);
+        T_dual_quat(3) = cos(alpha/2) * sin(theta/2);
+        T_dual_quat(4) = -a/2 * sin(alpha/2) * cos(theta/2) - d/2 * cos(alpha/2) * sin(theta/2);
+        T_dual_quat(5) =  a/2 * cos(alpha/2) * cos(theta/2) - d/2 * sin(alpha/2) * sin(theta/2);
+        T_dual_quat(6) =  a/2 * cos(alpha/2) * sin(theta/2) + d/2 * sin(alpha/2) * cos(theta/2);
+        T_dual_quat(7) = -a/2 * sin(alpha/2) * sin(theta/2) + d/2 * cos(alpha/2) * cos(theta/2);
 
-            T(0,0) = cos(theta); T(0,1) = -sin(theta) * cos(alpha); T(0,2) = sin(theta) * sin(alpha) ; T(0,3) = a * cos(theta);
-            T(1,0) = sin(theta); T(1,1) = cos(theta) * cos(alpha) ; T(1,2) = -cos(theta) * sin(alpha); T(1,3) = a * sin(theta);
-            T(2,0) = 0         ; T(2,1) = sin(alpha)              ; T(2,2) = cos(alpha)              ; T(2,3) = d;
-            T(3,0) = 0         ; T(3,1) = 0                       ; T(3,2) = 0                       ; T(3,3) = 1;
-        }
-        else
-        {
-            ROS_ERROR("Wrong type");
-            return false;
-        }
+
         T_BVH p;
-        p.T = T;
+
         // Calculate BVH points
-        if(dh_param.type == "r")
+        if(d > 0)
         {
-            double d = std::stod(dh_params.at(i).d);
-            if(d > 0)
-            {
-                SX T_point = SX::sym("point", 4,4);
-                T_point(0,0) = 0; T_point(0,1) = 0; T_point(0,2) = 0; T_point(0,3) = 0;
-                T_point(1,0) = 0; T_point(1,1) = 0; T_point(1,2) = 0; T_point(1,3) = 0;
-                T_point(2,0) = 0; T_point(2,1) = 0; T_point(2,2) = 0; T_point(2,3) = d/2;
-                T_point(3,0) = 0; T_point(3,1) = 0; T_point(3,2) = 0; T_point(3,3) = 1;
-                p.BVH_p = T_point;
-                p.constraint = true;
-            }
+            SX T_point = SX::sym("point", 4,4);
+            T_point(0,0) = 0; T_point(0,1) = 0; T_point(0,2) = 0; T_point(0,3) = 0;
+            T_point(1,0) = 0; T_point(1,1) = 0; T_point(1,2) = 0; T_point(1,3) = 0;
+            T_point(2,0) = 0; T_point(2,1) = 0; T_point(2,2) = 0; T_point(2,3) = d/2;
+            T_point(3,0) = 0; T_point(3,1) = 0; T_point(3,2) = 0; T_point(3,3) = 1;
+            p.BVH_p = T_point;
+            p.constraint = true;
         }
+        p.T = T;
 
         transform_vec_bvh_.push_back(p);
+
+        transformation_vector_dual_quat_.push_back(T_dual_quat);
     }
-
-    // Set up Transformation matrices for the base
-    SX T = SX::sym("T",4,4);
-    double a = dh_params_base_.at(2).a;
-    double alpha = dh_params_base_.at(2).alpha;
-    double d = std::stod(dh_params_base_.at(2).d);
-    SX theta = x_(2);
-
-    T(0,0) = cos(theta); T(0,1) = -sin(theta); T(0,2) = 0; T(0,3) = x_(0);
-    T(1,0) = sin(theta); T(1,1) = cos(theta) ; T(1,2) = 0; T(1,3) = x_(1);
-    T(2,0) = 0         ; T(2,1) = 0          ; T(2,2) = 1; T(2,3) = d;
-    T(3,0) = 0         ; T(3,1) = 0          ; T(3,2) = 0; T(3,3) = 1;
-    fk_base_ = T;
+    ROS_WARN_STREAM("Finished");
 
     // Get Endeffector FK
     for(int i=0; i< transform_vec_bvh_.size(); i++)
     {
-        if(base_active_)
+        if(i==0)
         {
-            if(i==0)
-            {
-                fk_ = mtimes(fk_base_,transform_vec_bvh_.at(i).T);
-            }
-            else
-            {
-    //            if(transform_vec_bvh_.at(i).constraint)
-    //            {
-    //                SX T_point = mtimes(fk_,transform_vec_bvh_.at(i).BVH_p);
-    //                SX T_pos = SX::vertcat({T_point(0,3),T_point(1,3),T_point(2,3)});
-    //                bvh_points_.push_back(T_pos);
-    //            }
-    //            else
-    //            {
-    //                SX T_point = mtimes(fk_,transform_vec_bvh_.at(i).T);
-    //                SX T_pos = SX::vertcat({T_point(0,3),T_point(1,3),T_point(2,3)});
-    //                bvh_points_.push_back(T_pos);
-    //            }
-                fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
-            }
+            fk_ = transform_vec_bvh_.at(i).T;
+            fk_dual_quat_ = transformation_vector_dual_quat_.at(i);
+
         }
         else
         {
-            if(i==0)
+            if(transform_vec_bvh_.at(i).constraint)
             {
-                fk_ = transform_vec_bvh_.at(i).T;
+                SX T_point = mtimes(fk_,transform_vec_bvh_.at(i).BVH_p);
+                SX T_pos = SX::vertcat({T_point(0,3),T_point(1,3),T_point(2,3)});
+                bvh_points_.push_back(T_pos);
             }
             else
             {
-                fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
+                SX T_point = mtimes(fk_,transform_vec_bvh_.at(i).T);
+                SX T_pos = SX::vertcat({T_point(0,3),T_point(1,3),T_point(2,3)});
+                bvh_points_.push_back(T_pos);
             }
+            fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
+            fk_dual_quat_ = dual_quaternion_product(fk_dual_quat_, transformation_vector_dual_quat_.at(i));
         }
     }
 
@@ -323,21 +231,16 @@ bool CobNonlinearMPC::initialize()
         }
     }
 
-    for(int i = 0; i < control_dim_; i++)
-    {
-        u_init_.push_back(0);
-    }
-
     joint_state_ = KDL::JntArray(7);
     odometry_state_ = KDL::JntArray(3);
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
     odometry_sub_ = nh_.subscribe("base/odometry", 1, &CobNonlinearMPC::odometryCallback, this);
-    pose_sub_ = nh_.subscribe("arm_left/command_pose", 1, &CobNonlinearMPC::poseCallback, this);
+    pose_sub_ = nh_.subscribe("command_pose", 1, &CobNonlinearMPC::poseCallback, this);
 
     base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);
     pub_ = nh_.advertise<std_msgs::Float64MultiArray>("joint_group_velocity_controller/command", 1);
 
-    ROS_WARN_STREAM(nh_.getNamespace() << "/NMPC...initialized!");
+    ROS_INFO_STREAM(nh_.getNamespace() << "/NMPC...initialized!");
     return true;
 }
 
@@ -347,30 +250,31 @@ void CobNonlinearMPC::poseCallback(const geometry_msgs::Pose::ConstPtr& msg)
 
     Eigen::MatrixXd qdot = mpc_step(*msg, state);
 
-    geometry_msgs::Twist base_vel_msg;
+//    geometry_msgs::Twist base_vel_msg;
     std_msgs::Float64MultiArray vel_msg;
-
-    base_vel_msg.linear.x = qdot(0);
-    base_vel_msg.linear.y = qdot(1);
-    base_vel_msg.linear.z = 0;
-    base_vel_msg.angular.x = 0;
-    base_vel_msg.angular.y = 0;
-    base_vel_msg.angular.z = qdot(2);
-
-    base_vel_pub_.publish(base_vel_msg);
-
-
-    for (unsigned int i = 3; i < 10; i++)
-    {
-        vel_msg.data.push_back(qdot(i));
-    }
-    pub_.publish(vel_msg);
-
-//    for (unsigned int i = 0; i < 7; i++)
+//
+//    base_vel_msg.linear.x = qdot(0);
+//    base_vel_msg.linear.y = qdot(1);
+//    base_vel_msg.linear.z = 0;
+//    base_vel_msg.angular.x = 0;
+//    base_vel_msg.angular.y = 0;
+//    base_vel_msg.angular.z = qdot(2);
+//
+//
+//    base_vel_pub_.publish(base_vel_msg);
+//
+//
+//    for (unsigned int i = 3; i < 10; i++)
 //    {
-//        vel_msg.data.push_back(static_cast<double>(qdot(i)));
+//        vel_msg.data.push_back(qdot(i));
 //    }
 //    pub_.publish(vel_msg);
+
+        for (unsigned int i = 0; i < 7; i++)
+        {
+            vel_msg.data.push_back(qdot(i));
+        }
+        pub_.publish(vel_msg);
 }
 
 
@@ -379,8 +283,8 @@ void CobNonlinearMPC::jointstateCallback(const sensor_msgs::JointState::ConstPtr
 
     KDL::JntArray q_temp = joint_state_;
     std::vector<std::string> joint_names;
-    joint_names = {"arm_left_1_joint", "arm_left_2_joint", "arm_left_3_joint", "arm_left_4_joint", "arm_left_5_joint", "arm_left_6_joint", "arm_left_7_joint"};
-//    joint_names = {"arm_1_joint","arm_2_joint","arm_3_joint","arm_4_joint","arm_5_joint","arm_6_joint","arm_7_joint"};
+//    joint_names = {"arm_left_1_link", "arm_left_2_link", "arm_left_3_link", "arm_left_4_link", "arm_left_5_link", "arm_left_6_link", "arm_left_7_link"};
+    joint_names = {"arm_1_joint","arm_2_joint","arm_3_joint","arm_4_joint","arm_5_joint","arm_6_joint","arm_7_joint"};
 
     int count = 0;
 
@@ -417,20 +321,20 @@ void CobNonlinearMPC::odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
 
 KDL::JntArray CobNonlinearMPC::getJointState()
 {
-    KDL:: JntArray tmp(joint_state_.rows() + odometry_state_.rows());
-//    KDL:: JntArray tmp(joint_state_.rows());
+//    KDL:: JntArray tmp(joint_state_.rows() + odometry_state_.rows());
+    KDL:: JntArray tmp(joint_state_.rows());
 
 //    tmp = this->odometry_state_;
 
-    for(int i = 0; i < odometry_state_.rows(); i++)
+    for(int i = 0; i < joint_state_.rows(); i++)
     {
-        tmp(i) = odometry_state_(i);
+        tmp(i) = joint_state_(i);
     }
 
-    for(int i = 0 ; i < joint_state_.rows(); i++)
-    {
-        tmp(i+odometry_state_.rows()) = this->joint_state_(i);
-    }
+//    for(int i = joint_state_.rows() ; i < joint_state_.rows() + odometry_state_.rows(); i++)
+//    {
+//        tmp(i) = this->odometry_state_(i - joint_state_.rows());
+//    }
 
     return tmp;
 }
@@ -450,7 +354,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     vector<double> x0_min;
     vector<double> x0_max;
     vector<double> x_init;
-    for(unsigned int i=0; i < state.rows();i++)
+    for(unsigned int i=0; i< state.rows();i++)
     {
         x0_min.push_back(state(i));
         x0_max.push_back(state(i));
@@ -466,7 +370,6 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     // Current Quaternion and Position Vector.
     double kappa = 0.001; // Small regulation term for numerical stability for the NLP
-
     SX q_c = SX::vertcat({
         0.5 * sqrt(fk_(0,0) + fk_(1,1) + fk_(2,2) + 1.0 + kappa),
         0.5 * (sign((fk_(2,1) - fk_(1,2)))) * sqrt(fk_(0,0) - fk_(1,1) - fk_(2,2) + 1.0 + kappa),
@@ -481,23 +384,49 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX q_d = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
 
     // Prevent collision with Base_link
-//    SX barrier;
-//
-//    SX dist = dot(p_c,p_c);
-//    barrier = exp((min_dist - sqrt(dist))/0.01);
-//
-//    SX BVH_barrier;
-//
-//    for(int i = 0; i < bvh_points_.size(); i++)
-//    {
-//        dist = dot(bvh_points_.at(i) - p_c,bvh_points_.at(i) - p_c);
-//        barrier += exp((min_dist - sqrt(dist))/0.01);
-//    }
+    SX barrier;
 
-    SX R = 0.005*SX::vertcat({1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+    SX dist = dot(p_c,p_c);
+    barrier = exp((min_dist - sqrt(dist))/0.01);
+
+    SX BVH_barrier;
+
+    for(int i = 0; i < bvh_points_.size(); i++)
+    {
+        dist = dot(bvh_points_.at(i) - p_c,bvh_points_.at(i) - p_c);
+        barrier += exp((min_dist - sqrt(dist))/0.01);
+    }
+    ROS_WARN_STREAM("Constraint Balls: " << bvh_points_.size());
+
+    SX R = 0.01*SX::vertcat({1, 1, 1, 1, 1, 1, 1});
+
+//    // Objective function
+//    SX position = SX::vertcat({1,0,0,0,0,0,0,0});
+//
+//    SX p_ee = dual_quaternion_product(fk_dual_quat_, position);
+//
+//    // Dual conjugate of dual quaternion conjugate
+//    SX fk_dual_conjugate = SX::vertcat({fk_dual_quat_(0), fk_dual_quat_(1), fk_dual_quat_(2), fk_dual_quat_(3),
+//                                        -fk_dual_quat_(4), fk_dual_quat_(5), fk_dual_quat_(6), fk_dual_quat_(7)});
+//    // Dual quaternion conjugate
+////    SX fk_dual_conjugate = SX::vertcat({fk_dual_quat_(0), -fk_dual_quat_(1), -fk_dual_quat_(2), -fk_dual_quat_(3),
+////                                        fk_dual_quat_(4), -fk_dual_quat_(5), -fk_dual_quat_(6), -fk_dual_quat_(7)});
+//
+////    SX fk_dual_conjugate = SX::vertcat({fk_dual_quat_(0), -fk_dual_quat_(1), -fk_dual_quat_(2), -fk_dual_quat_(3),
+////                                        -fk_dual_quat_(4), fk_dual_quat_(5), fk_dual_quat_(6), fk_dual_quat_(7)});
+//    p_ee = dual_quaternion_product(p_ee,fk_dual_conjugate);
+//    SX pos1 = SX::vertcat({p_ee(5), p_ee(6), p_ee(7)});
+//    SX dual_barrier = dot(q_d(0) - p_ee(0),q_d(0) - p_ee(0)) + dot(q_d(1) - p_ee(1),q_d(1) - p_ee(1)) + dot(q_d(2) - p_ee(2),q_d(2) - p_ee(2)) + dot(q_d(3) - p_ee(3),q_d(3) - p_ee(3));
+
+    SX q_c_inverse = SX::vertcat({q_c(0), -q_c(1), -q_c(2), -q_c(3)});
+//    q_c_inverse = q_c_inverse / sqrt(dot(q_c_inverse,q_c_inverse));
+
+    SX e_quat= quaternion_product(q_c_inverse,q_d);
+    SX test_quat = 1*dot(1-e_quat,1-e_quat);
 
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
-    SX L = 10 * dot(p_c-x_d,p_c-x_d);// + 10 * dot(q_c - q_d, q_c - q_d) + energy;// + barrier;
+//    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10 * dot(q_c - q_d, q_c - q_d) + energy + barrier;
+    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 100 * dot(1- e_quat,1 - e_quat) + energy + barrier;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -642,7 +571,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     // Safe optimal control sequence at time t_k and take it as inital guess at t_k+1
     for(int i=0; i < control_dim_; ++i)
     {
-        u_init_.push_back(q_dot(i));
+        u_init_.push_back( q_dot(i) );
 //        u_init_.push_back(V_opt.at(state_dim_ + control_dim_ + i));
     }
 
@@ -651,38 +580,22 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     point.y = 0;
     point.z = 0;
 
-//    for(int i = 0; i < bvh_points_.size(); i++)
-//    {
-//        Function fk_sx = Function("fk_sx", {x_}, {bvh_points_.at(i)});
-//        SX result = fk_sx(sx_x_new).at(0);
-//
-//        point.x = (double)result(0);
-//        point.y = (double)result(1);
-//        point.z = (double)result(2);
-//
-//        visualizeBVH(point, min_dist, i);
-//    }
-
-    Function fk_test = Function("fk_", {x_}, {p_c});
-
-    vector<double> state_vec;
-    for(int i = 0; i < state.rows(); i++)
+    for(int i = 0; i < bvh_points_.size(); i++)
     {
-        state_vec.push_back((double)state.data(i));
+        Function fk_sx = Function("fk_sx", {x_}, {bvh_points_.at(i)});
+        SX result = fk_sx(sx_x_new).at(0);
+
+        point.x = (double)result(0);
+        point.y = (double)result(1);
+        point.z = (double)result(2);
+
+        visualizeBVH(point, min_dist, i);
     }
+    Function test_quat_f = Function("test_quat", {x_}, {test_quat});
+    SX q_res = test_quat_f(sx_x_new).at(0);
 
-    SX state_v = SX::vertcat({state_vec});
+    ROS_WARN_STREAM("Q_error: " << q_res(0));
 
-    SX test_v = fk_test(sx_x_new).at(0);
-
-    state_vec.clear();
-    state_vec.push_back((double)test_v(0));
-    state_vec.push_back((double)test_v(1));
-    state_vec.push_back((double)test_v(2));
-
-    ROS_WARN_STREAM("Goal: \n" << pose.position.x <<", " << pose.position.y << ", " << pose.position.z);
-    ROS_WARN_STREAM("Current Position: \n" << state_vec);
-//    ROS_WARN_STREAM(q_dot);
     return q_dot;
 }
 
