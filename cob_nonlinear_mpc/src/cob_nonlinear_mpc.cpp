@@ -216,10 +216,11 @@ bool CobNonlinearMPC::initialize()
         if (dh_params.at(i).type == "r")
         {
             SX theta = x_(i);
+            SX theta_value = std::stod(dh_params.at(i).theta);
             double d = std::stod(dh_params.at(i).d);
 
-            T(0,0) = cos(theta); T(0,1) = -sin(theta) * cos(alpha); T(0,2) = sin(theta) * sin(alpha) ; T(0,3) = a * cos(theta);
-            T(1,0) = sin(theta); T(1,1) = cos(theta) * cos(alpha) ; T(1,2) = -cos(theta) * sin(alpha); T(1,3) = a * sin(theta);
+            T(0,0) = cos(theta + theta_value); T(0,1) = -sin(theta + theta_value) * cos(alpha); T(0,2) = sin(theta + theta_value) * sin(alpha) ; T(0,3) = a * cos(theta + theta_value);
+            T(1,0) = sin(theta + theta_value); T(1,1) = cos(theta + theta_value) * cos(alpha) ; T(1,2) = -cos(theta + theta_value) * sin(alpha); T(1,3) = a * sin(theta + theta_value);
             T(2,0) = 0         ; T(2,1) = sin(alpha)              ; T(2,2) = cos(alpha)              ; T(2,3) = d;
             T(3,0) = 0         ; T(3,1) = 0                       ; T(3,2) = 0                       ; T(3,3) = 1;
         }
@@ -259,18 +260,24 @@ bool CobNonlinearMPC::initialize()
         transform_vec_bvh_.push_back(p);
     }
 
-    // Set up Transformation matrices for the base
-    SX T = SX::sym("T",4,4);
-    double a = dh_params_base_.at(2).a;
-    double alpha = dh_params_base_.at(2).alpha;
-    double d = std::stod(dh_params_base_.at(2).d);
-    SX theta = x_(2);
+    if(base_active_)
+    {
+        // Set up Transformation matrices for the base
+        SX T = SX::sym("T",4,4);
+        double a = dh_params_base_.at(2).a;
+        double alpha = dh_params_base_.at(2).alpha;
+        double d = std::stod(dh_params_base_.at(2).d);
+        SX theta = x_(2);
+        SX theta_value = std::stod(dh_params_base_.at(2).theta);
 
-    T(0,0) = cos(theta); T(0,1) = -sin(theta); T(0,2) = 0; T(0,3) = x_(0);
-    T(1,0) = sin(theta); T(1,1) = cos(theta) ; T(1,2) = 0; T(1,3) = x_(1);
-    T(2,0) = 0         ; T(2,1) = 0          ; T(2,2) = 1; T(2,3) = d;
-    T(3,0) = 0         ; T(3,1) = 0          ; T(3,2) = 0; T(3,3) = 1;
-    fk_base_ = T;
+        T(0,0) = cos(theta + theta_value); T(0,1) = -sin(theta + theta_value) * cos(alpha); T(0,2) = sin(theta + theta_value) * sin(alpha) ; T(0,3) = 0;
+        T(1,0) = sin(theta + theta_value); T(1,1) = cos(theta + theta_value) * cos(alpha) ; T(1,2) = -cos(theta + theta_value) * sin(alpha); T(1,3) = 0;
+        T(2,0) = 0         ; T(2,1) = sin(alpha)              ; T(2,2) = cos(alpha)              ; T(2,3) = d;
+        T(3,0) = 0         ; T(3,1) = 0                       ; T(3,2) = 0                       ; T(3,3) = 1;
+        fk_base_ = T;
+
+
+    }
 
     // Get Endeffector FK
     for(int i=0; i< transform_vec_bvh_.size(); i++)
@@ -311,17 +318,40 @@ bool CobNonlinearMPC::initialize()
         }
     }
 
+    for(int i=0; i< 3; i++)
+    {
+        if(i==0)
+        {
+            fk_link2_ = mtimes(fk_base_,transform_vec_bvh_.at(i).T);
+        }
+        else
+        {
+            fk_link2_ = mtimes(fk_link2_,transform_vec_bvh_.at(i).T);
+        }
+    }
+    for(int i=0; i< 4; i++)
+    {
+        if(i==0)
+        {
+            fk_link3_ = mtimes(fk_base_,transform_vec_bvh_.at(i).T);
+        }
+        else
+        {
+            fk_link3_ = mtimes(fk_link3_,transform_vec_bvh_.at(i).T);
+        }
+    }
     for(int i=0; i< 5; i++)
     {
         if(i==0)
         {
-            fk_link4_ = transform_vec_bvh_.at(i).T;
+            fk_link4_ = mtimes(fk_base_,transform_vec_bvh_.at(i).T);
         }
         else
         {
-            fk_link4_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
+            fk_link4_ = mtimes(fk_link4_,transform_vec_bvh_.at(i).T);
         }
     }
+
 
     for(int i = 0; i < control_dim_; i++)
     {
@@ -335,7 +365,7 @@ bool CobNonlinearMPC::initialize()
     pose_sub_ = nh_.subscribe("arm_left/command_pose", 1, &CobNonlinearMPC::poseCallback, this);
 
     base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);
-    pub_ = nh_.advertise<std_msgs::Float64MultiArray>("joint_group_velocity_controller/command", 1);
+    pub_ = nh_.advertise<std_msgs::Float64MultiArray>("arm_left/joint_group_velocity_controller/command", 1);
 
     ROS_WARN_STREAM(nh_.getNamespace() << "/NMPC...initialized!");
     return true;
@@ -350,27 +380,33 @@ void CobNonlinearMPC::poseCallback(const geometry_msgs::Pose::ConstPtr& msg)
     geometry_msgs::Twist base_vel_msg;
     std_msgs::Float64MultiArray vel_msg;
 
-    base_vel_msg.linear.x = qdot(0);
-    base_vel_msg.linear.y = qdot(1);
-    base_vel_msg.linear.z = 0;
-    base_vel_msg.angular.x = 0;
-    base_vel_msg.angular.y = 0;
-    base_vel_msg.angular.z = qdot(2);
-
-    base_vel_pub_.publish(base_vel_msg);
-
-
-    for (unsigned int i = 3; i < 10; i++)
+    if(base_active_)
     {
-        vel_msg.data.push_back(qdot(i));
-    }
-    pub_.publish(vel_msg);
+        base_vel_msg.linear.x = 0*qdot(0);
+        base_vel_msg.linear.y = 0*qdot(1);
+        base_vel_msg.linear.z = 0;
+        base_vel_msg.angular.x = 0;
+        base_vel_msg.angular.y = 0;
+        base_vel_msg.angular.z = 0*qdot(2);
 
-//    for (unsigned int i = 0; i < 7; i++)
-//    {
-//        vel_msg.data.push_back(static_cast<double>(qdot(i)));
-//    }
-//    pub_.publish(vel_msg);
+        base_vel_pub_.publish(base_vel_msg);
+
+
+        for (unsigned int i = 3; i < 10; i++)
+        {
+            vel_msg.data.push_back(qdot(i));
+        }
+
+        pub_.publish(vel_msg);
+    }
+    else
+    {
+        for (unsigned int i = 0; i < 7; i++)
+        {
+            vel_msg.data.push_back(static_cast<double>(qdot(i)));
+        }
+        pub_.publish(vel_msg);
+    }
 }
 
 
@@ -417,22 +453,32 @@ void CobNonlinearMPC::odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
 
 KDL::JntArray CobNonlinearMPC::getJointState()
 {
-    KDL:: JntArray tmp(joint_state_.rows() + odometry_state_.rows());
-//    KDL:: JntArray tmp(joint_state_.rows());
-
-//    tmp = this->odometry_state_;
-
-    for(int i = 0; i < odometry_state_.rows(); i++)
+    if(base_active_)
     {
-        tmp(i) = odometry_state_(i);
-    }
+        KDL:: JntArray tmp(joint_state_.rows() + odometry_state_.rows());
 
-    for(int i = 0 ; i < joint_state_.rows(); i++)
+        for(int i = 0; i < odometry_state_.rows(); i++)
+        {
+            tmp(i) = odometry_state_(i);
+        }
+
+        for(int i = 0 ; i < joint_state_.rows(); i++)
+        {
+            tmp(i+odometry_state_.rows()) = this->joint_state_(i);
+        }
+        return tmp;
+    }
+    else
     {
-        tmp(i+odometry_state_.rows()) = this->joint_state_(i);
-    }
+        KDL:: JntArray tmp(joint_state_.rows());
 
-    return tmp;
+        for(int i = 0 ; i < joint_state_.rows(); i++)
+        {
+            tmp(i) = this->joint_state_(i);
+        }
+
+        return tmp;
+    }
 }
 
 
@@ -474,6 +520,8 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         0.5 * (sign((fk_(1,0) - fk_(0,1)))) * sqrt(fk_(2,2) - fk_(0,0) - fk_(1,1) + 1.0 + kappa)
     });
 
+    q_c = q_c / sqrt(dot(q_c,q_c));
+
     SX p_c = SX::vertcat({fk_(0,3), fk_(1,3), fk_(2,3)});
 
     // Desired Goal-pose
@@ -494,10 +542,16 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //        barrier += exp((min_dist - sqrt(dist))/0.01);
 //    }
 
-    SX R = 0.005*SX::vertcat({1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+    SX R = 0.005*SX::vertcat({0, 0, 0, 1, 1, 1, 1, 1, 1, 1});
 
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
-    SX L = 10 * dot(p_c-x_d,p_c-x_d);// + 10 * dot(q_c - q_d, q_c - q_d) + energy;// + barrier;
+
+    SX q_c_inverse = SX::vertcat({q_c(0), -q_c(1), -q_c(2), -q_c(3)});
+    q_c_inverse = q_c_inverse / sqrt(dot(q_c_inverse,q_c_inverse));
+
+    SX e_quat= quaternion_product(q_c_inverse,q_d);
+
+    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10* dot(e_quat,e_quat) + energy;// + barrier;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -664,6 +718,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //    }
 
     Function fk_test = Function("fk_", {x_}, {p_c});
+    Function fk_test_q = Function("fk_q_", {x_}, {q_c});
 
     vector<double> state_vec;
     for(int i = 0; i < state.rows(); i++)
@@ -680,8 +735,31 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     state_vec.push_back((double)test_v(1));
     state_vec.push_back((double)test_v(2));
 
-    ROS_WARN_STREAM("Goal: \n" << pose.position.x <<", " << pose.position.y << ", " << pose.position.z);
-    ROS_WARN_STREAM("Current Position: \n" << state_vec);
+
+
+
+//    ROS_WARN_STREAM("Goal: \n" << pose.position.x <<", " << pose.position.y << ", " << pose.position.z);
+//    ROS_WARN_STREAM("Current Position: \n" << state_vec);
+
+    state_vec.clear();
+    for(int i = 0; i < state.rows(); i++)
+    {
+        state_vec.push_back((double)state.data(i));
+    }
+
+    state_v = SX::vertcat({state_vec});
+
+    test_v = fk_test_q(sx_x_new).at(0);
+
+    state_vec.clear();
+    state_vec.push_back((double)test_v(0));
+    state_vec.push_back((double)test_v(1));
+    state_vec.push_back((double)test_v(2));
+    state_vec.push_back((double)test_v(3));
+
+    ROS_WARN_STREAM("Goal: \n" << pose.orientation.w<< ", " << pose.orientation.x<< ", " << pose.orientation.y<< ", " << pose.orientation.z);
+    ROS_WARN_STREAM("Current Orientation: \n" << state_vec);
+
 //    ROS_WARN_STREAM(q_dot);
     return q_dot;
 }

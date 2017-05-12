@@ -100,7 +100,7 @@ private:
     SX u_;
     SX x_;
     SX fk_;
-    SX fk_link4_;
+    SX fk_link4_, fk_link2_, fk_link3_;
 
     SX fk_base_;
 
