@@ -215,7 +215,7 @@ bool CobNonlinearMPC::initialize()
 
         if (dh_params.at(i).type == "r")
         {
-            SX theta = x_(i);
+            SX theta = x_(i+3);
             double d = std::stod(dh_params.at(i).d);
             SX theta_value = std::stod(dh_params.at(i).theta);
 
@@ -227,7 +227,7 @@ bool CobNonlinearMPC::initialize()
         else if (dh_params.at(i).type == "p")
         {
             double theta = std::stod(dh_params.at(i).theta);
-            SX d = x_(i);
+            SX d = x_(i+3);
 
             T(0,0) = cos(theta); T(0,1) = -sin(theta) * cos(alpha); T(0,2) = sin(theta) * sin(alpha) ; T(0,3) = a * cos(theta);
             T(1,0) = sin(theta); T(1,1) = cos(theta) * cos(alpha) ; T(1,2) = -cos(theta) * sin(alpha); T(1,3) = a * sin(theta);
@@ -268,10 +268,16 @@ bool CobNonlinearMPC::initialize()
     SX theta = x_(2);
     SX theta_value = std::stod(dh_params_base_.at(2).theta);
 
-    T(0,0) = cos(theta + theta_value); T(0,1) = -sin(theta + theta_value) * cos(alpha); T(0,2) = sin(theta + theta_value) * sin(alpha) ; T(0,3) = x_(0);// * cos(theta + theta_value);
-    T(1,0) = sin(theta + theta_value); T(1,1) = cos(theta + theta_value) * cos(alpha) ; T(1,2) = -cos(theta + theta_value) * sin(alpha); T(1,3) = x_(1);// * sin(theta + theta_value);
-    T(2,0) = 0                       ; T(2,1) = sin(alpha)                            ; T(2,2) = cos(alpha)                            ; T(2,3) = d;
-    T(3,0) = 0                       ; T(3,1) = 0                                     ; T(3,2) = 0                                     ; T(3,3) = 1;
+    T(0,0) = cos(theta); T(0,1) = 0; T(0,2) = -sin(theta )  ; T(0,3) = x_(0);// * cos(theta + theta_value);// * cos(theta + theta_value);
+    T(1,0) = sin(theta); T(1,1) = 0; T(1,2) = cos(theta)  ; T(1,3) = x_(1);// * sin(theta + theta_value);// * sin(theta + theta_value);
+    T(2,0) = 0                       ; T(2,1) = -1                            ; T(2,2) = 0                   ; T(2,3) = d;
+    T(3,0) = 0                       ; T(3,1) = 0                                     ; T(3,2) = 0          ; T(3,3) = 1;
+
+
+//    T(0,0) = cos(theta +theta_value); T(0,1) = -sin(theta +theta_value)* cos(alpha); T(0,2) = sin(theta) *sin(alpha) ; T(0,3) = x_(0)*cos(theta)-sin(theta)*x_(1);// * cos(theta + theta_value);
+//    T(1,0) = sin(theta +theta_value); T(1,1) =  cos(theta +theta_value)* cos(alpha); T(1,2) = -cos(theta) *sin(alpha); T(1,3) = x_(1)*cos(theta)+sin(theta)*x_(0);// * sin(theta + theta_value);
+//    T(2,0) = 0                    ; T(2,1) = sin(alpha)               ; T(2,2) = cos(alpha)             ; T(2,3) = d;
+//    T(3,0) = 0                    ; T(3,1) = 0                      ; T(3,2) = 0                        ; T(3,3) = 1;
 
     fk_base_ = T;
 
@@ -325,8 +331,8 @@ bool CobNonlinearMPC::initialize()
     odometry_sub_ = nh_.subscribe("base/odometry", 1, &CobNonlinearMPC::odometryCallback, this);
     pose_sub_ = nh_.subscribe("arm_left/command_pose", 1, &CobNonlinearMPC::poseCallback, this);
 
-    base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);
-    pub_ = nh_.advertise<std_msgs::Float64MultiArray>("arm_left/joint_group_velocity_controller/command", 1);
+    //base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);
+    //pub_ = nh_.advertise<std_msgs::Float64MultiArray>("arm_left/joint_group_velocity_controller/command", 1);
 
     ROS_WARN_STREAM(nh_.getNamespace() << "/NMPC...initialized!");
     return true;
@@ -338,7 +344,6 @@ void CobNonlinearMPC::poseCallback(const geometry_msgs::Pose::ConstPtr& msg)
 
     Eigen::MatrixXd qdot = mpc_step(*msg, state);
 
-    ROS_INFO_STREAM("qdot: " << qdot);
     geometry_msgs::Twist base_vel_msg;
     std_msgs::Float64MultiArray vel_msg;
 
@@ -349,14 +354,14 @@ void CobNonlinearMPC::poseCallback(const geometry_msgs::Pose::ConstPtr& msg)
     base_vel_msg.angular.y = 0;
     base_vel_msg.angular.z = qdot(2);
 
-    base_vel_pub_.publish(base_vel_msg);
+    //base_vel_pub_.publish(base_vel_msg);
 
 
     for (unsigned int i = 3; i < 10; i++)
     {
         vel_msg.data.push_back(qdot(i));
     }
-    pub_.publish(vel_msg);
+    //pub_.publish(vel_msg);
 
 //    for (unsigned int i = 0; i < 7; i++)
 //    {
@@ -667,6 +672,9 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     Function fk_test = Function("fk_", {x_}, {p_c});
 
+    SX p_base = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)});
+
+    Function fk_test_base = Function("fk_base_", {x_}, {p_base});
     vector<double> state_vec;
     for(int i = 0; i < state.rows(); i++)
     {
@@ -677,13 +685,21 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     SX test_v = fk_test(sx_x_new).at(0);
 
+    SX test_base = fk_test_base(sx_x_new).at(0);
+    vector<double> base_vec;
+    base_vec.clear();
+    base_vec.push_back((double)test_base(0));
+    base_vec.push_back((double)test_base(1));
+    base_vec.push_back((double)test_base(2));
+
     state_vec.clear();
     state_vec.push_back((double)test_v(0));
     state_vec.push_back((double)test_v(1));
     state_vec.push_back((double)test_v(2));
-
+    ROS_INFO_STREAM("Joint values:" <<x_new);
     ROS_WARN_STREAM("Goal: \n" << pose.position.x <<", " << pose.position.y << ", " << pose.position.z);
     ROS_WARN_STREAM("Current Position: \n" << state_vec);
+    ROS_WARN_STREAM("BASE Position: \n" << base_vec);
 //    ROS_WARN_STREAM(q_dot);
     return q_dot;
 }
