@@ -205,6 +205,63 @@ bool CobNonlinearMPC::initialize()
     u_ = SX::sym("u", state_dim_);  // control
     x_ = SX::sym("x", control_dim_); // states
 
+    // Chain
+    if (!nh_.getParam("chain_base_link", chain_base_link_))
+    {
+        ROS_ERROR("Parameter 'chain_base_link' not set");
+        return false;
+    }
+
+    if (!nh_.getParam("chain_tip_link", chain_tip_link_))
+    {
+        ROS_ERROR("Parameter 'chain_tip_link' not set");
+        return false;
+    }
+
+    /// parse robot_description and generate KDL chains
+    KDL::Tree my_tree;
+    if (!kdl_parser::treeFromParam("/robot_description", my_tree))
+    {
+        ROS_ERROR("Failed to construct kdl tree");
+        return false;
+    }
+
+    my_tree.getChain(chain_base_link_, chain_tip_link_, chain_);
+    if (chain_.getNrOfJoints() == 0)
+    {
+        ROS_ERROR("Failed to initialize kinematic chain");
+        return false;
+    }
+    ROS_INFO_STREAM("Number of joints:" << chain_.getNrOfJoints());
+    ROS_INFO_STREAM("Number of segments:" << chain_.getNrOfSegments());
+    dof = joint_names.size();
+
+    /// parse robot_description and set velocity limits
+    urdf::Model model;
+    if (!model.initParam("/robot_description"))
+    {
+        ROS_ERROR("Failed to parse urdf file for JointLimits");
+        return false;
+    }
+    ROS_WARN("Robot Description loaded...");
+    std::vector<double> joint_params_;
+    urdf::Vector3 position;
+
+    std::vector<KDL::Joint> joints;
+    for (uint16_t i = 0; i < chain_.getNrOfSegments(); i++)
+    {
+        joints.push_back(chain_.getSegment(i).getJoint());
+        ROS_INFO_STREAM("Chain segment "<< chain_.getSegment(i).getName());
+    }
+
+    // JointNames
+    std::vector<KDL::Vector> joint_origins;
+    for (uint16_t i = 0; i < joints.size(); i++)
+    {
+        joint_origins.push_back(joints[i].JointOrigin());
+        ROS_INFO_STREAM("Joint name "<< joints[i].getName()<< " type: " <<joints[i].getType() << " origin: " << joint_origins[i].x());
+
+    }
 
     // Set up Transformation matrices for the arm
     for(int i=0; i< dh_params.size(); i++)
@@ -241,21 +298,6 @@ bool CobNonlinearMPC::initialize()
         }
         T_BVH p;
         p.T = T;
-        // Calculate BVH points
-//        if(dh_param.type == "r")
-//        {
-//            double d = std::stod(dh_params.at(i).d);
-//            if(d > 0)
-//            {
-//                SX T_point = SX::sym("point", 4,4);
-//                T_point(0,0) = 0; T_point(0,1) = 0; T_point(0,2) = 0; T_point(0,3) = 0;
-//                T_point(1,0) = 0; T_point(1,1) = 0; T_point(1,2) = 0; T_point(1,3) = 0;
-//                T_point(2,0) = 0; T_point(2,1) = 0; T_point(2,2) = 0; T_point(2,3) = d/2;
-//                T_point(3,0) = 0; T_point(3,1) = 0; T_point(3,2) = 0; T_point(3,3) = 1;
-//                p.BVH_p = T_point;
-//                p.constraint = true;
-//            }
-//        }
 
         transform_vec_bvh_.push_back(p);
     }
@@ -375,7 +417,7 @@ void CobNonlinearMPC::jointstateCallback(const sensor_msgs::JointState::ConstPtr
 {
 
     KDL::JntArray q_temp = joint_state_;
-    std::vector<std::string> joint_names;
+
     joint_names = {"arm_left_1_joint", "arm_left_2_joint", "arm_left_3_joint", "arm_left_4_joint", "arm_left_5_joint", "arm_left_6_joint", "arm_left_7_joint"};
 //    joint_names = {"arm_1_joint","arm_2_joint","arm_3_joint","arm_4_joint","arm_5_joint","arm_6_joint","arm_7_joint"};
 
