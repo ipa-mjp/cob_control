@@ -248,10 +248,16 @@ bool CobNonlinearMPC::initialize()
     urdf::Vector3 position;
 
     std::vector<KDL::Joint> joints;
+    KDL::Frame F;
+    double roll,pitch,yaw;
     for (uint16_t i = 0; i < chain_.getNrOfSegments(); i++)
     {
         joints.push_back(chain_.getSegment(i).getJoint());
         ROS_INFO_STREAM("Chain segment "<< chain_.getSegment(i).getName());
+        F=chain_.getSegment(i).getFrameToTip();
+        F.M.GetRPY(roll,pitch,yaw);
+        ROS_INFO_STREAM("Chain frame "<< " X: " << F.p.x()<< " Y: " << F.p.y()<< " Z: "<<F.p.z());
+        ROS_INFO_STREAM("Chain frame "<< " ROLL: " << roll<< " PITCH: " << pitch<< " YAW: "<<yaw);
     }
 
     // JointNames
@@ -260,6 +266,7 @@ bool CobNonlinearMPC::initialize()
     {
         joint_origins.push_back(joints[i].JointOrigin());
         ROS_INFO_STREAM("Joint name "<< joints[i].getName()<< " type: " <<joints[i].getType() << " origin: " << joint_origins[i].x());
+        ROS_INFO_STREAM("Joint position "<< " X: " << joint_origins[i].x()<< " Y: " << joint_origins[i].y()<< " Z: " << joint_origins[i].z());
 
     }
 
