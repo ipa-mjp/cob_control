@@ -258,6 +258,8 @@ bool CobNonlinearMPC::initialize()
         F.M.GetRPY(roll,pitch,yaw);
         ROS_INFO_STREAM("Chain frame "<< " X: " << F.p.x()<< " Y: " << F.p.y()<< " Z: "<<F.p.z());
         ROS_INFO_STREAM("Chain frame "<< " ROLL: " << roll<< " PITCH: " << pitch<< " YAW: "<<yaw);
+
+
     }
 
     // JointNames
@@ -266,69 +268,70 @@ bool CobNonlinearMPC::initialize()
     {
         joint_origins.push_back(joints[i].JointOrigin());
         ROS_INFO_STREAM("Joint name "<< joints[i].getName()<< " type: " <<joints[i].getType() << " origin: " << joint_origins[i].x());
-        ROS_INFO_STREAM("Joint position "<< " X: " << joint_origins[i].x()<< " Y: " << joint_origins[i].y()<< " Z: " << joint_origins[i].z());
+        ROS_INFO_STREAM("Joint origin "<< " X: " << joint_origins[i].x()<< " Y: " << joint_origins[i].y()<< " Z: " << joint_origins[i].z());
 
     }
 
-    // Set up Transformation matrices for the arm
-    for(int i=0; i< dh_params.size(); i++)
+    KDL::Vector pos;
+    KDL::Rotation rot;
+    std::vector<KDL::Frame> joint_frames;
+    std::vector<KDL::Frame> F_previous;
+    for (uint16_t i = 0; i < chain_.getNrOfSegments(); i++)
     {
-        SX T = SX::sym("T",4,4);
-        double a = dh_params.at(i).a;
-        double alpha = dh_params.at(i).alpha;
-
-        if (dh_params.at(i).type == "r")
+        if(joints[i].getType()==8)
         {
-            SX theta = x_(i+3);
-            double d = std::stod(dh_params.at(i).d);
-            SX theta_value = std::stod(dh_params.at(i).theta);
+            ROS_INFO("Fixed joint");
+            ROS_INFO_STREAM("Chain segment "<< chain_.getSegment(i).getName());
+            if(i==0)
+                F_previous.push_back(chain_.getSegment(i).getFrameToTip());
+            else
+                F_previous.push_back(F_previous.at(i-1)*chain_.getSegment(i).getFrameToTip());
 
-            T(0,0) = cos(theta + theta_value); T(0,1) = -sin(theta + theta_value) * cos(alpha); T(0,2) = sin(theta + theta_value) * sin(alpha) ; T(0,3) = a * cos(theta + theta_value);
-            T(1,0) = sin(theta + theta_value); T(1,1) = cos(theta + theta_value) * cos(alpha) ; T(1,2) = -cos(theta + theta_value) * sin(alpha); T(1,3) = a * sin(theta + theta_value);
-            T(2,0) = 0                       ; T(2,1) = sin(alpha)                            ; T(2,2) = cos(alpha)                            ; T(2,3) = d;
-            T(3,0) = 0                       ; T(3,1) = 0                                     ; T(3,2) = 0                                     ; T(3,3) = 1;
-        }
-        else if (dh_params.at(i).type == "p")
-        {
-            double theta = std::stod(dh_params.at(i).theta);
-            SX d = x_(i+3);
+            ROS_INFO_STREAM("Joint position "<< " X: " << F_previous.at(i).p.x()<< " Y: " << F_previous.at(i).p.y()<< " Z: " << F_previous.at(i).p.z());
 
-            T(0,0) = cos(theta); T(0,1) = -sin(theta) * cos(alpha); T(0,2) = sin(theta) * sin(alpha) ; T(0,3) = a * cos(theta);
-            T(1,0) = sin(theta); T(1,1) = cos(theta) * cos(alpha) ; T(1,2) = -cos(theta) * sin(alpha); T(1,3) = a * sin(theta);
-            T(2,0) = 0         ; T(2,1) = sin(alpha)              ; T(2,2) = cos(alpha)              ; T(2,3) = d;
-            T(3,0) = 0         ; T(3,1) = 0                       ; T(3,2) = 0                       ; T(3,3) = 1;
         }
-        else
-        {
-            ROS_ERROR("Wrong type");
-            return false;
+        if(joints[i].getType()==0){
+            ROS_INFO("Rotational joint");
+            ROS_INFO_STREAM("Joint name "<< chain_.getSegment(i).getJoint().getName());
+            F_previous.push_back(F_previous.at(i-1)*chain_.getSegment(i).getFrameToTip());
+            pos=F_previous.at(i).p;
+            joint_frames.push_back(F_previous.at(i));
+            ROS_INFO_STREAM("Joint position "<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
+            //F_previous.p= pos;
         }
+    }
+
+    SX T = SX::sym("T",4,4);
+
+    //Base config
+    T(0,0) = cos(x_(2)); T(0,1) = -sin(x_(2));  T(0,2) = 0.0; T(0,3) = x_(0);
+    T(1,0) = sin(x_(2)); T(1,1) = cos(x_(2));   T(1,2) = 0.0; T(1,3) = x_(1);
+    T(2,0) = 0.0;        T(2,1) = 0.0;          T(2,2) = 1.0; T(2,3) = 0;
+    T(3,0) = 0.0;        T(3,1) = 0.0;          T(3,2) = 0.0; T(3,3) = 1.0;
+
+    fk_base_ = T;
+
+    for(int i=0;i<joint_frames.size();i++){
+
+        rot=joint_frames.at(i).M;
+        pos=joint_frames.at(i).p;
+        ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
+        T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
+        T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
+        T(0,2) = rot(0,2); T(0,3) = pos.x();
+        T(1,0) = rot(1,0)*cos(x_(i+3))+rot(1,1)*sin(x_(i+3));
+        T(1,1) = -rot(1,0)*sin(x_(i+3))+rot(1,1)*cos(x_(i+3));
+        T(1,2) = rot(1,2); T(1,3) = pos.y();
+        T(2,0) = rot(2,0)*cos(x_(i+3))+rot(2,1)*sin(x_(i+3));
+        T(2,1) = -rot(2,0)*sin(x_(i+3))+rot(2,1)*cos(x_(i+3));
+        T(2,2) = rot(2,2); T(2,3) = pos.z();
+        T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
+
         T_BVH p;
         p.T = T;
 
         transform_vec_bvh_.push_back(p);
     }
-
-    // Set up Transformation matrices for the base
-    SX T = SX::sym("T",4,4);
-    double a = dh_params_base_.at(2).a;
-    double alpha = dh_params_base_.at(2).alpha;
-    double d = std::stod(dh_params_base_.at(2).d);
-    SX theta = x_(2);
-    SX theta_value = std::stod(dh_params_base_.at(2).theta);
-
-    T(0,0) = cos(theta); T(0,1) = 0; T(0,2) = -sin(theta )  ; T(0,3) = x_(0);// * cos(theta + theta_value);// * cos(theta + theta_value);
-    T(1,0) = sin(theta); T(1,1) = 0; T(1,2) = cos(theta)  ; T(1,3) = x_(1);// * sin(theta + theta_value);// * sin(theta + theta_value);
-    T(2,0) = 0                       ; T(2,1) = -1                            ; T(2,2) = 0                   ; T(2,3) = d;
-    T(3,0) = 0                       ; T(3,1) = 0                                     ; T(3,2) = 0          ; T(3,3) = 1;
-
-
-//    T(0,0) = cos(theta +theta_value); T(0,1) = -sin(theta +theta_value)* cos(alpha); T(0,2) = sin(theta) *sin(alpha) ; T(0,3) = x_(0)*cos(theta)-sin(theta)*x_(1);// * cos(theta + theta_value);
-//    T(1,0) = sin(theta +theta_value); T(1,1) =  cos(theta +theta_value)* cos(alpha); T(1,2) = -cos(theta) *sin(alpha); T(1,3) = x_(1)*cos(theta)+sin(theta)*x_(0);// * sin(theta + theta_value);
-//    T(2,0) = 0                    ; T(2,1) = sin(alpha)               ; T(2,2) = cos(alpha)             ; T(2,3) = d;
-//    T(3,0) = 0                    ; T(3,1) = 0                      ; T(3,2) = 0                        ; T(3,3) = 1;
-
-    fk_base_ = T;
 
     // Get Endeffector FK
     for(int i=0; i< transform_vec_bvh_.size(); i++)
@@ -336,7 +339,7 @@ bool CobNonlinearMPC::initialize()
         if(base_active_)
         {
             if(i==0)
-            {
+            {   ROS_INFO("BASE IS ACTIVE");
                 fk_ = mtimes(fk_base_,transform_vec_bvh_.at(i).T);
             }
             else
