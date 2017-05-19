@@ -3,7 +3,7 @@
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "cob_nonlinear_mpc_node");
+    ros::init(argc, argv, "nmpc");
     CobNonlinearMPC* cob_nonlinear_mpc = new CobNonlinearMPC();
 
     if (!cob_nonlinear_mpc->initialize())
