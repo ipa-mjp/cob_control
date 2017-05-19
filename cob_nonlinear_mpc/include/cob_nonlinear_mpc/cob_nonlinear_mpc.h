@@ -109,7 +109,7 @@ private:
     SX x_;
     SX fk_;
     SX fk_link4_;
-
+    std::vector<SX> fk_vector_;
     SX fk_base_;
 
     SX fk_dual_quat_;

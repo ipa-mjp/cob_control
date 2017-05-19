@@ -372,19 +372,9 @@ bool CobNonlinearMPC::initialize()
                 fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
             }
         }
+        fk_vector_.push_back(fk_); // stacks up multiplied transformation until link n
     }
 
-    for(int i=0; i< 5; i++)
-    {
-        if(i==0)
-        {
-            fk_link4_ = transform_vec_bvh_.at(i).T;
-        }
-        else
-        {
-            fk_link4_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
-        }
-    }
 
     for(int i = 0; i < control_dim_; i++)
     {
@@ -395,10 +385,10 @@ bool CobNonlinearMPC::initialize()
     odometry_state_ = KDL::JntArray(3);
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
     odometry_sub_ = nh_.subscribe("base/odometry", 1, &CobNonlinearMPC::odometryCallback, this);
-    pose_sub_ = nh_.subscribe("arm_left/command_pose", 1, &CobNonlinearMPC::poseCallback, this);
+    pose_sub_ = nh_.subscribe(nh_.getNamespace()+"/command_pose", 1, &CobNonlinearMPC::poseCallback, this);
 
     base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);
-    pub_ = nh_.advertise<std_msgs::Float64MultiArray>("arm_left/joint_group_velocity_controller/command", 1);
+    pub_ = nh_.advertise<std_msgs::Float64MultiArray>(nh_.getNamespace()+"/joint_group_velocity_controller/command", 1);
 
     ROS_WARN_STREAM(nh_.getNamespace() << "/NMPC...initialized!");
     return true;
@@ -503,7 +493,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
                                           const KDL::JntArray& state)
 {
     // Distance to obstacle
-    double min_dist = 0.15;
+    double min_dist = 0.4;
 
     // Bounds and initial guess for the control
     vector<double> u_min =  input_constraints_min_;
@@ -519,6 +509,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         x0_max.push_back(state(i));
         x_init.push_back(state(i));
     }
+
     vector<double> x_min  = state_path_constraints_min_;
     vector<double> x_max  = state_path_constraints_max_;
     vector<double> xf_min = state_terminal_constraints_min_;
@@ -543,20 +534,73 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX x_d = SX::vertcat({pose.position.x, pose.position.y, pose.position.z});
     SX q_d = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
 
+    // Base constraint
+    SX bvh_p = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+0.1});
+    SX bvh_p2 = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+0.5});
+    SX bvh_p3 = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+0.7});
+    SX bvh_p4 = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+0.9});
+    SX bvh_p5 = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+1.1});
+    SX bvh_p6 = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+1.4});
+
     // Prevent collision with Base_link
-//    SX barrier;
-//
+    SX barrier;
+    SX dist;
 //    SX dist = dot(p_c,p_c);
 //    barrier = exp((min_dist - sqrt(dist))/0.01);
 //
 //    SX BVH_barrier;
 //
-//    for(int i = 0; i < bvh_points_.size(); i++)
-//    {
-//        dist = dot(bvh_points_.at(i) - p_c,bvh_points_.at(i) - p_c);
-//        barrier += exp((min_dist - sqrt(dist))/0.01);
-//    }
 
+
+    for(int i = 0; i < fk_vector_.size(); i++)
+    {
+        if(i>0)
+        {
+            SX tmp = fk_vector_.at(i);
+            SX p = SX::vertcat({tmp(0,3),tmp(1,3),tmp(2,3)});
+
+            if(i==1)
+            {
+                dist = dot(bvh_p - p,bvh_p - p);
+                barrier = exp((min_dist - sqrt(dist))/0.01);
+
+                dist = dot(bvh_p2 - p,bvh_p2 - p);
+                barrier += exp((0.25 - sqrt(dist))/0.01);
+
+                dist = dot(bvh_p3 - p,bvh_p3 - p);
+                barrier += exp((0.2 - sqrt(dist))/0.01);
+
+                dist = dot(bvh_p4 - p,bvh_p4 - p);
+                barrier += exp((0.2 - sqrt(dist))/0.01);
+
+                dist = dot(bvh_p5 - p,bvh_p5 - p);
+                barrier += exp((0.2 - sqrt(dist))/0.01);
+
+                dist = dot(bvh_p6 - p,bvh_p6 - p);
+                barrier += exp((0.25 - sqrt(dist))/0.01);
+            }
+            else
+            {
+                dist = dot(bvh_p - p,bvh_p - p);
+                barrier += exp((min_dist - sqrt(dist))/0.01);
+
+                dist = dot(bvh_p2 - p,bvh_p2 - p);
+                barrier += exp((0.25 - sqrt(dist))/0.01);
+
+                dist = dot(bvh_p3 - p,bvh_p3 - p);
+                barrier += exp((0.2 - sqrt(dist))/0.01);
+
+                dist = dot(bvh_p4 - p,bvh_p4 - p);
+                barrier += exp((0.2 - sqrt(dist))/0.01);
+
+                dist = dot(bvh_p5 - p,bvh_p5 - p);
+                barrier += exp((0.2 - sqrt(dist))/0.01);
+
+                dist = dot(bvh_p6 - p,bvh_p6 - p);
+                barrier += exp((0.25 - sqrt(dist))/0.01);
+            }
+        }
+    }
     SX q_c_inverse = SX::vertcat({q_c(0), -q_c(1), -q_c(2), -q_c(3)});
 //    q_c_inverse = q_c_inverse / sqrt(dot(q_c_inverse,q_c_inverse));
 
@@ -565,12 +609,11 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //    q_c_inverse = q_c_inverse / sqrt(dot(q_c_inverse,q_c_inverse));
 
     SX error_attitute = SX::vertcat({ e_quat(1), e_quat(2), e_quat(3)});
-
-    SX R = 0.005*SX::vertcat({1000, 1000, 1000, 1, 1, 1, 1, 1, 1, 1});
+    SX R = 1*SX::vertcat({10, 10, 10, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
 
 //    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10 * dot(q_c - q_d, q_c - q_d) + energy + barrier;
-    SX L = 10*dot(p_c-x_d,p_c-x_d) + 10 * dot(error_attitute,error_attitute) + energy;// + barrier;
+    SX L = 10*dot(p_c-x_d,p_c-x_d) + energy + 10 * dot(error_attitute,error_attitute) + barrier;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -672,7 +715,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //    opts["ipopt.hessian_constant"] = "yes";
     opts["ipopt.linear_solver"] = "ma27";
     opts["ipopt.print_level"] = 0;
-    opts["print_time"] = false;
+    opts["print_time"] = true;
     opts["expand"] = true;  // Removes overhead, not sure if this command does the same as in the create_integrator function !
 
     // Create an NLP solver and buffers
@@ -724,11 +767,60 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     point.y = 0;
     point.z = 0;
 
+    Function fk_sx = Function("fk_sx", {x_}, {bvh_p});
+    Function fk_sx2 = Function("fk_sx2", {x_}, {bvh_p2});
+    Function fk_sx3 = Function("fk_sx3", {x_}, {bvh_p3});
+    Function fk_sx4 = Function("fk_sx4", {x_}, {bvh_p4});
+    Function fk_sx5 = Function("fk_sx3", {x_}, {bvh_p5});
+    Function fk_sx6 = Function("fk_sx4", {x_}, {bvh_p6});
+
+    SX result = fk_sx(sx_x_new).at(0);
+    point.x = (double)result(0);
+    point.y = (double)result(1);
+    point.z = (double)result(2);
+
+    visualizeBVH(point, 0.4, 1);
+
+    result = fk_sx2(sx_x_new).at(0);
+    point.x = (double)result(0);
+    point.y = (double)result(1);
+    point.z = (double)result(2);
+
+    visualizeBVH(point, 0.25, 2);
+
+    result = fk_sx3(sx_x_new).at(0);
+    point.x = (double)result(0);
+    point.y = (double)result(1);
+    point.z = (double)result(2);
+
+    visualizeBVH(point, 0.2, 3);
+
+    result = fk_sx4(sx_x_new).at(0);
+    point.x = (double)result(0);
+    point.y = (double)result(1);
+    point.z = (double)result(2);
+
+    visualizeBVH(point, 0.2, 4);
+
+    result = fk_sx5(sx_x_new).at(0);
+    point.x = (double)result(0);
+    point.y = (double)result(1);
+    point.z = (double)result(2);
+
+    visualizeBVH(point, 0.2, 5);
+
+    result = fk_sx6(sx_x_new).at(0);
+    point.x = (double)result(0);
+    point.y = (double)result(1);
+    point.z = (double)result(2);
+
+    visualizeBVH(point, 0.25, 6);
+
 //    for(int i = 0; i < bvh_points_.size(); i++)
 //    {
 //        Function fk_sx = Function("fk_sx", {x_}, {bvh_points_.at(i)});
-//        SX result = fk_sx(sx_x_new).at(0);
 //
+//        SX result = fk_sx(sx_x_new).at(0);
 //        point.x = (double)result(0);
 //        point.y = (double)result(1);
 //        point.z = (double)result(2);
@@ -736,37 +828,6 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //        visualizeBVH(point, min_dist, i);
 //    }
 
-    Function fk_test = Function("fk_", {x_}, {p_c});
-
-    SX p_base = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)});
-
-    Function fk_test_base = Function("fk_base_", {x_}, {p_base});
-    vector<double> state_vec;
-    for(int i = 0; i < state.rows(); i++)
-    {
-        state_vec.push_back((double)state.data(i));
-    }
-
-    SX state_v = SX::vertcat({state_vec});
-
-    SX test_v = fk_test(sx_x_new).at(0);
-
-    SX test_base = fk_test_base(sx_x_new).at(0);
-    vector<double> base_vec;
-    base_vec.clear();
-    base_vec.push_back((double)test_base(0));
-    base_vec.push_back((double)test_base(1));
-    base_vec.push_back((double)test_base(2));
-
-    state_vec.clear();
-    state_vec.push_back((double)test_v(0));
-    state_vec.push_back((double)test_v(1));
-    state_vec.push_back((double)test_v(2));
-    ROS_INFO_STREAM("Joint values:" <<x_new);
-    ROS_WARN_STREAM("Goal: \n" << pose.position.x <<", " << pose.position.y << ", " << pose.position.z);
-    ROS_WARN_STREAM("Current Position: \n" << state_vec);
-    ROS_WARN_STREAM("BASE Position: \n" << base_vec);
-//    ROS_WARN_STREAM(q_dot);
     return q_dot;
 }
 
@@ -850,7 +911,7 @@ void CobNonlinearMPC::visualizeBVH(const geometry_msgs::Point point, double radi
     marker.lifetime = ros::Duration();
     marker.action = visualization_msgs::Marker::ADD;
     marker.ns = "preview";
-    marker.header.frame_id = "world";
+    marker.header.frame_id = "odom_combined";
 
 
     marker.scale.x = 2*radius;
