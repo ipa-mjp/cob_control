@@ -78,6 +78,14 @@ private:
     ros::NodeHandle nh_;
     std::vector<std::string> transformation_names_;
     std::vector<std::string> transformation_names_base_;
+    std::vector<std::string> joint_names;
+
+    std::string chain_base_link_;
+    std::string chain_tip_link_;
+
+    int dof;
+
+    KDL::Chain chain_;
 
     DH dh_param;
     std::vector<DH> dh_params;
@@ -100,7 +108,7 @@ private:
     SX u_;
     SX x_;
     SX fk_;
-    SX fk_link4_, fk_link2_, fk_link3_;
+    SX fk_link4_;
 
     SX fk_base_;
 

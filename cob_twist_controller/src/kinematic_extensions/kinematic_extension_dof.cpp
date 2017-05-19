@@ -266,7 +266,7 @@ JointStates KinematicExtensionBaseActive::adjustJointStates(const JointStates& j
 //    js.current_q_(chain_dof+1) = odom_transform_bl.getOrigin().y();
 //    js.current_q_(chain_dof+2) = yaw;
 //
-    ROS_INFO_STREAM("Joint_states: " << odom_transform_bl.getOrigin().x() << ", " << odom_transform_bl.getOrigin().y() << ", " << yaw);
+
     return js;
 }
 
