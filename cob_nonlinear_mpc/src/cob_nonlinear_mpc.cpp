@@ -288,16 +288,29 @@ bool CobNonlinearMPC::initialize()
                 F_previous.push_back(F_previous.at(i-1)*chain_.getSegment(i).getFrameToTip());
 
             ROS_INFO_STREAM("Joint position "<< " X: " << F_previous.at(i).p.x()<< " Y: " << F_previous.at(i).p.y()<< " Z: " << F_previous.at(i).p.z());
-
+            rot=F_previous.at(i).M;
+            ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
+            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << F_previous.at(i).p.x()<< " Y: " << F_previous.at(i).p.y()<< " Z: " << F_previous.at(i).p.z());
         }
         if(joints[i].getType()==0){
             ROS_INFO("Rotational joint");
             ROS_INFO_STREAM("Joint name "<< chain_.getSegment(i).getJoint().getName());
             F_previous.push_back(F_previous.at(i-1)*chain_.getSegment(i).getFrameToTip());
             pos=F_previous.at(i).p;
-            joint_frames.push_back(F_previous.at(i));
+            if(joint_frames.size()==0){
+                ROS_INFO("FIRST JOINT");
+                joint_frames.push_back(F_previous.at(i));
+                rot=F_previous.at(i).M;
+                pos=F_previous.at(i).p;
+            }
+            else{
+                joint_frames.push_back(chain_.getSegment(i).getFrameToTip());
+                rot=chain_.getSegment(i).getFrameToTip().M;
+                pos=chain_.getSegment(i).getFrameToTip().p;
+            }
             ROS_INFO_STREAM("Joint position "<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
-            //F_previous.p= pos;
+            ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
+            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());            //F_previous.p= pos;
         }
     }
 
@@ -315,6 +328,7 @@ bool CobNonlinearMPC::initialize()
 
         rot=joint_frames.at(i).M;
         pos=joint_frames.at(i).p;
+        ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",joint_frames.at(i)(0,0),joint_frames.at(i)(0,1),joint_frames.at(i)(0,2),joint_frames.at(i)(1,0),joint_frames.at(i)(1,1),joint_frames.at(i)(1,2),joint_frames.at(i)(2,0),joint_frames.at(i)(2,1),joint_frames.at(i)(2,2));
         ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
         T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
         T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
@@ -339,7 +353,7 @@ bool CobNonlinearMPC::initialize()
         if(base_active_)
         {
             if(i==0)
-            {   ROS_INFO("BASE IS ACTIVE");
+            {   ROS_WARN("BASE IS ACTIVE");
                 fk_ = mtimes(fk_base_,transform_vec_bvh_.at(i).T);
             }
             else
@@ -383,8 +397,8 @@ bool CobNonlinearMPC::initialize()
     odometry_sub_ = nh_.subscribe("base/odometry", 1, &CobNonlinearMPC::odometryCallback, this);
     pose_sub_ = nh_.subscribe("arm_left/command_pose", 1, &CobNonlinearMPC::poseCallback, this);
 
-    //base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);
-    //pub_ = nh_.advertise<std_msgs::Float64MultiArray>("arm_left/joint_group_velocity_controller/command", 1);
+    base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);
+    pub_ = nh_.advertise<std_msgs::Float64MultiArray>("arm_left/joint_group_velocity_controller/command", 1);
 
     ROS_WARN_STREAM(nh_.getNamespace() << "/NMPC...initialized!");
     return true;
@@ -406,14 +420,14 @@ void CobNonlinearMPC::poseCallback(const geometry_msgs::Pose::ConstPtr& msg)
     base_vel_msg.angular.y = 0;
     base_vel_msg.angular.z = qdot(2);
 
-    //base_vel_pub_.publish(base_vel_msg);
+    base_vel_pub_.publish(base_vel_msg);
 
 
     for (unsigned int i = 3; i < 10; i++)
     {
         vel_msg.data.push_back(qdot(i));
     }
-    //pub_.publish(vel_msg);
+    pub_.publish(vel_msg);
 
 //    for (unsigned int i = 0; i < 7; i++)
 //    {
