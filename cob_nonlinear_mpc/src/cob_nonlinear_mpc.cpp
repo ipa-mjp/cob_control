@@ -90,11 +90,6 @@ bool CobNonlinearMPC::initialize()
         ROS_ERROR("Parameter 'base/base_active' not set");
         return false;
     }
-    if (!nh_nmpc.getParam("base/transformations", transformation_names_base_))
-    {
-        ROS_ERROR("Parameter 'base/transformations' not set");
-        return false;
-    }
 
     // nh_nmpc_constraints
     if (!nh_nmpc_constraints.getParam("state/path_constraints/min", state_path_constraints_min_))
