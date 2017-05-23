@@ -20,12 +20,18 @@
       <param name="publish_frequency" type="double" value="50.0" />
       <param name="tf_prefix" type="string" value="" />
   </node>
-
+	
+	<!-- fake Calibration and HW-Services -->
+  	<node pkg="rostopic" type="rostopic" name="fake_joint_calibration" args="pub /calibrated std_msgs/Bool true" />
+  	<node ns="arm" pkg="cob_helper_tools" type="fake_driver.py" name="fake_driver" cwd="node" respawn="false" output="screen"/>
+  	
 	<include file="$(find cob_bringup)/controllers/generic_controller.launch">
 		<arg name="robot" value="lwa4p_extended"/>
 		<arg name="component_name" value="arm"/>
 		<arg name="pkg_hardware_config" value="$(find schunk_lwa4p_extended)"/>
 	</include>
+	
+	<node ns="arm" name="joint_states_relay" pkg="topic_tools" type="relay" args="joint_states /joint_states" cwd="node" respawn="true" output="screen"/>
 
   <include file="$(find cob_bringup)/controllers/generic_cartesian_controller.launch">
     <arg name="component_name" value="arm" />

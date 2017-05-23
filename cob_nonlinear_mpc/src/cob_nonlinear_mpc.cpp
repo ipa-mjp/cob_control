@@ -125,83 +125,6 @@ bool CobNonlinearMPC::initialize()
         return false;
     }
 
-    if(base_active_)
-    {
-        for(unsigned int i = 0; i < transformation_names_base_.size(); i++)
-        {
-            DH param;
-
-            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/type", param.type))
-            {
-                ROS_ERROR("Parameter 'type' not set");
-                return false;
-            }
-
-            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/theta", param.theta))
-            {
-                ROS_ERROR("Parameter 'theta' not set");
-                return false;
-            }
-            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/d", param.d))
-            {
-                ROS_ERROR("Parameter 'd' not set");
-                return false;
-            }
-
-            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/a", param.a))
-            {
-                ROS_ERROR("Parameter 'a' not set");
-                return false;
-            }
-
-            if (!nh_nmpc_base_dh.getParam(transformation_names_base_.at(i)+"/alpha", param.alpha))
-            {
-                ROS_ERROR("Parameter 'alpha' not set");
-                return false;
-            }
-
-            dh_params_base_.push_back(param);
-        }
-    }
-
-
-    // nh_nmpc_dh
-    for(unsigned int i = 0; i < transformation_names_.size(); i++)
-    {
-        DH param;
-
-        if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/type", param.type))
-        {
-            ROS_ERROR("Parameter 'type' not set");
-            return false;
-        }
-
-        if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/theta", param.theta))
-        {
-            ROS_ERROR("Parameter 'theta' not set");
-            return false;
-        }
-        if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/d", param.d))
-        {
-            ROS_ERROR("Parameter 'd' not set");
-            return false;
-        }
-
-        if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/a", param.a))
-        {
-            ROS_ERROR("Parameter 'a' not set");
-            return false;
-        }
-
-        if (!nh_nmpc_dh.getParam(transformation_names_.at(i)+"/alpha", param.alpha))
-        {
-            ROS_ERROR("Parameter 'alpha' not set");
-            return false;
-        }
-
-        dh_params.push_back(param);
-    }
-
     // Casadi symbolics
     u_ = SX::sym("u", state_dim_);  // control
     x_ = SX::sym("x", control_dim_); // states
@@ -296,19 +219,21 @@ bool CobNonlinearMPC::initialize()
         if(joints[i].getType()==0){
             ROS_INFO("Rotational joint");
             ROS_INFO_STREAM("Joint name "<< chain_.getSegment(i).getJoint().getName());
-            F_previous.push_back(F_previous.at(i-1)*chain_.getSegment(i).getFrameToTip());
-            pos=F_previous.at(i).p;
+
             if(joint_frames.size()==0){
                 ROS_INFO("FIRST JOINT");
+                F_previous.push_back(chain_.getSegment(i).getFrameToTip());
                 joint_frames.push_back(F_previous.at(i));
                 rot=F_previous.at(i).M;
                 pos=F_previous.at(i).p;
             }
             else{
+                F_previous.push_back(F_previous.at(i-1)*chain_.getSegment(i).getFrameToTip());
                 joint_frames.push_back(chain_.getSegment(i).getFrameToTip());
                 rot=chain_.getSegment(i).getFrameToTip().M;
                 pos=chain_.getSegment(i).getFrameToTip().p;
             }
+            pos=F_previous.at(i).p;
             ROS_INFO_STREAM("Joint position "<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
             ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
             ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());            //F_previous.p= pos;
@@ -395,10 +320,13 @@ bool CobNonlinearMPC::initialize()
     joint_state_ = KDL::JntArray(7);
     odometry_state_ = KDL::JntArray(3);
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
-    odometry_sub_ = nh_.subscribe("base/odometry", 1, &CobNonlinearMPC::odometryCallback, this);
-    pose_sub_ = nh_.subscribe("command_pose", 1, &CobNonlinearMPC::poseCallback, this);
 
-    base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);
+    if(base_active_){
+        odometry_sub_ = nh_.subscribe("base/odometry", 1, &CobNonlinearMPC::odometryCallback, this);
+        pose_sub_ = nh_.subscribe("command_pose", 1, &CobNonlinearMPC::poseCallback, this);
+        base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);
+    }
+
     pub_ = nh_.advertise<std_msgs::Float64MultiArray>("joint_group_velocity_controller/command", 1);
 
     ROS_WARN_STREAM(nh_.getNamespace() << "/NMPC...initialized!");

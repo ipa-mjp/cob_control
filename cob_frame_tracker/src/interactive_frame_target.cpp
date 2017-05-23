@@ -100,6 +100,7 @@ bool InteractiveFrameTarget::initialize()
     bool transform_available = false;
     while (!transform_available)
     {
+        ROS_WARN_STREAM("Waiting for TF from "<< root_frame_ <<" to " <<tracking_frame_);
         try
         {
             tf_listener_.lookupTransform(root_frame_, tracking_frame_, ros::Time(), target_pose_);
