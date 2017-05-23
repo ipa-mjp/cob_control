@@ -123,7 +123,7 @@ private:
 
     ros::Subscriber jointstate_sub_;
     ros::Subscriber odometry_sub_;
-    ros::Subscriber pose_sub_;
+    ros::Subscriber frame_tracker_sub_;
 
     ros::Publisher base_vel_pub_;
     ros::Publisher pub_;
@@ -150,7 +150,7 @@ public:
     void jointstateCallback(const sensor_msgs::JointState::ConstPtr& msg);
     void odometryCallback(const nav_msgs::Odometry::ConstPtr& msg);
 
-    void poseCallback(const geometry_msgs::Pose::ConstPtr& msg);
+    void FrameTrackerCallback(const geometry_msgs::Pose::ConstPtr& msg);
     KDL::JntArray getJointState();
 
     Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose,

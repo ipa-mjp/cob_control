@@ -317,23 +317,23 @@ bool CobNonlinearMPC::initialize()
         u_init_.push_back(0);
     }
 
-    joint_state_ = KDL::JntArray(7);
-    odometry_state_ = KDL::JntArray(3);
+    joint_state_ = KDL::JntArray(chain_.getNrOfJoints());
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
 
     if(base_active_){
+        odometry_state_ = KDL::JntArray(3);
         odometry_sub_ = nh_.subscribe("base/odometry", 1, &CobNonlinearMPC::odometryCallback, this);
-        pose_sub_ = nh_.subscribe("command_pose", 1, &CobNonlinearMPC::poseCallback, this);
         base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);
     }
 
+    frame_tracker_sub_ = nh_.subscribe("command_pose", 1, &CobNonlinearMPC::FrameTrackerCallback, this);
     pub_ = nh_.advertise<std_msgs::Float64MultiArray>("joint_group_velocity_controller/command", 1);
 
     ROS_WARN_STREAM(nh_.getNamespace() << "/NMPC...initialized!");
     return true;
 }
 
-void CobNonlinearMPC::poseCallback(const geometry_msgs::Pose::ConstPtr& msg)
+void CobNonlinearMPC::FrameTrackerCallback(const geometry_msgs::Pose::ConstPtr& msg)
 {
     KDL::JntArray state = getJointState();
 
@@ -358,11 +358,6 @@ void CobNonlinearMPC::poseCallback(const geometry_msgs::Pose::ConstPtr& msg)
     }
     pub_.publish(vel_msg);
 
-//    for (unsigned int i = 0; i < 7; i++)
-//    {
-//        vel_msg.data.push_back(static_cast<double>(qdot(i)));
-//    }
-//    pub_.publish(vel_msg);
 }
 
 
