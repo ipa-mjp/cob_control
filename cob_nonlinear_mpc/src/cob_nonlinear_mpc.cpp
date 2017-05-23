@@ -49,6 +49,12 @@ bool CobNonlinearMPC::initialize()
     ros::NodeHandle nh_nmpc_base_dh("nmpc/base/dh");
     ros::NodeHandle nh_nmpc_constraints("nmpc/constraints");
 
+    // JointNames
+    if (!nh_.getParam("joint_names", joint_names))
+    {
+        ROS_ERROR("Parameter 'joint_names' not set");
+        return false;
+    }
 
     // nh_nmpc
     if (!nh_nmpc.getParam("transformations", transformation_names_))
@@ -441,9 +447,6 @@ void CobNonlinearMPC::jointstateCallback(const sensor_msgs::JointState::ConstPtr
 {
 
     KDL::JntArray q_temp = joint_state_;
-
-    joint_names = {"arm_left_1_joint", "arm_left_2_joint", "arm_left_3_joint", "arm_left_4_joint", "arm_left_5_joint", "arm_left_6_joint", "arm_left_7_joint"};
-//    joint_names = {"arm_1_joint","arm_2_joint","arm_3_joint","arm_4_joint","arm_5_joint","arm_6_joint","arm_7_joint"};
 
     int count = 0;
 
