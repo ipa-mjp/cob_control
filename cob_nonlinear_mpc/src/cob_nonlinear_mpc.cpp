@@ -126,8 +126,8 @@ bool CobNonlinearMPC::initialize()
     }
 
     // Casadi symbolics
-    u_ = SX::sym("u", state_dim_);  // control
-    x_ = SX::sym("x", control_dim_); // states
+    u_ = SX::sym("u", control_dim_);  // control
+    x_ = SX::sym("x", state_dim_); // states
 
     // Chain
     if (!nh_.getParam("chain_base_link", chain_base_link_))
@@ -241,14 +241,18 @@ bool CobNonlinearMPC::initialize()
     }
 
     SX T = SX::sym("T",4,4);
+    if(base_active_){
+        //Base config
+        T(0,0) = cos(x_(2)); T(0,1) = -sin(x_(2));  T(0,2) = 0.0; T(0,3) = x_(0);
+        T(1,0) = sin(x_(2)); T(1,1) = cos(x_(2));   T(1,2) = 0.0; T(1,3) = x_(1);
+        T(2,0) = 0.0;        T(2,1) = 0.0;          T(2,2) = 1.0; T(2,3) = 0;
+        T(3,0) = 0.0;        T(3,1) = 0.0;          T(3,2) = 0.0; T(3,3) = 1.0;
 
-    //Base config
-    T(0,0) = cos(x_(2)); T(0,1) = -sin(x_(2));  T(0,2) = 0.0; T(0,3) = x_(0);
-    T(1,0) = sin(x_(2)); T(1,1) = cos(x_(2));   T(1,2) = 0.0; T(1,3) = x_(1);
-    T(2,0) = 0.0;        T(2,1) = 0.0;          T(2,2) = 1.0; T(2,3) = 0;
-    T(3,0) = 0.0;        T(3,1) = 0.0;          T(3,2) = 0.0; T(3,3) = 1.0;
+        fk_base_ = T;
 
-    fk_base_ = T;
+    }
+    int offset;
+
 
     for(int i=0;i<joint_frames.size();i++){
 
@@ -256,22 +260,37 @@ bool CobNonlinearMPC::initialize()
         pos=joint_frames.at(i).p;
         ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",joint_frames.at(i)(0,0),joint_frames.at(i)(0,1),joint_frames.at(i)(0,2),joint_frames.at(i)(1,0),joint_frames.at(i)(1,1),joint_frames.at(i)(1,2),joint_frames.at(i)(2,0),joint_frames.at(i)(2,1),joint_frames.at(i)(2,2));
         ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
-        T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
-        T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
-        T(0,2) = rot(0,2); T(0,3) = pos.x();
-        T(1,0) = rot(1,0)*cos(x_(i+3))+rot(1,1)*sin(x_(i+3));
-        T(1,1) = -rot(1,0)*sin(x_(i+3))+rot(1,1)*cos(x_(i+3));
-        T(1,2) = rot(1,2); T(1,3) = pos.y();
-        T(2,0) = rot(2,0)*cos(x_(i+3))+rot(2,1)*sin(x_(i+3));
-        T(2,1) = -rot(2,0)*sin(x_(i+3))+rot(2,1)*cos(x_(i+3));
-        T(2,2) = rot(2,2); T(2,3) = pos.z();
-        T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
+        if(base_active_){
+            T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
+            T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
+            T(0,2) = rot(0,2); T(0,3) = pos.x();
+            T(1,0) = rot(1,0)*cos(x_(i+3))+rot(1,1)*sin(x_(i+3));
+            T(1,1) = -rot(1,0)*sin(x_(i+3))+rot(1,1)*cos(x_(i+3));
+            T(1,2) = rot(1,2); T(1,3) = pos.y();
+            T(2,0) = rot(2,0)*cos(x_(i+3))+rot(2,1)*sin(x_(i+3));
+            T(2,1) = -rot(2,0)*sin(x_(i+3))+rot(2,1)*cos(x_(i+3));
+            T(2,2) = rot(2,2); T(2,3) = pos.z();
+            T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
+        }
+        else{
+            T(0,0) = rot(0,0)*cos(x_(i))+rot(0,1)*sin(x_(i));
+            T(0,1) = -rot(0,0)*sin(x_(i))+rot(0,1)*cos(x_(i));
+            T(0,2) = rot(0,2); T(0,3) = pos.x();
+            T(1,0) = rot(1,0)*cos(x_(i))+rot(1,1)*sin(x_(i));
+            T(1,1) = -rot(1,0)*sin(x_(i))+rot(1,1)*cos(x_(i));
+            T(1,2) = rot(1,2); T(1,3) = pos.y();
+            T(2,0) = rot(2,0)*cos(x_(i))+rot(2,1)*sin(x_(i));
+            T(2,1) = -rot(2,0)*sin(x_(i))+rot(2,1)*cos(x_(i));
+            T(2,2) = rot(2,2); T(2,3) = pos.z();
+            T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
+        }
 
         T_BVH p;
         p.T = T;
 
         transform_vec_bvh_.push_back(p);
     }
+
 
     // Get Endeffector FK
     for(int i=0; i< transform_vec_bvh_.size(); i++)
@@ -368,7 +387,7 @@ void CobNonlinearMPC::jointstateCallback(const sensor_msgs::JointState::ConstPtr
 
     int count = 0;
 
-    for (uint16_t j = 0; j < 7; j++)
+    for (uint16_t j = 0; j < joint_state_.rows(); j++)
     {
         for (uint16_t i = 0; i < msg->name.size(); i++)
         {
@@ -402,9 +421,8 @@ void CobNonlinearMPC::odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
 KDL::JntArray CobNonlinearMPC::getJointState()
 {
     KDL:: JntArray tmp(joint_state_.rows() + odometry_state_.rows());
-//    KDL:: JntArray tmp(joint_state_.rows());
 
-//    tmp = this->odometry_state_;
+    ROS_INFO("STATE SIZE: %i", tmp.rows());
 
     for(int i = 0; i < odometry_state_.rows(); i++)
     {
@@ -430,7 +448,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     vector<double> u_min =  input_constraints_min_;
     vector<double> u_max  = input_constraints_max_;
 
-    // Bounds and initial guess for the state
+    ROS_INFO("Bounds and initial guess for the state");
     vector<double> x0_min;
     vector<double> x0_max;
     vector<double> x_init;
@@ -445,10 +463,10 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     vector<double> xf_min = state_terminal_constraints_min_;
     vector<double> xf_max = state_terminal_constraints_max_;
 
-    // ODE right hand side and quadrature
+    ROS_INFO("ODE right hand side and quadrature");
     SX qdot = SX::vertcat({u_});
 
-    // Current Quaternion and Position Vector.
+    ROS_INFO("Current Quaternion and Position Vector.");
     double kappa = 0.001; // Small regulation term for numerical stability for the NLP
 
     SX q_c = SX::vertcat({
@@ -460,7 +478,8 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     SX p_c = SX::vertcat({fk_(0,3), fk_(1,3), fk_(2,3)});
 
-    // Desired Goal-pose
+
+    ROS_INFO("Desired Goal-pose");
     SX x_d = SX::vertcat({pose.position.x, pose.position.y, pose.position.z});
     SX q_d = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
 
@@ -493,7 +512,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10 * dot(q_c - q_d, q_c - q_d) + energy + barrier;
     SX L = 10*dot(p_c-x_d,p_c-x_d) + 10 * dot(error_attitute,error_attitute) + energy;// + barrier;
 
-    // Create Euler integrator function
+    ROS_INFO("Create Euler integrator function");
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
 
 //    // Generate C-code
@@ -512,7 +531,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //
 //    F = external("F", "./nmpc.so");
 
-    // Total number of NLP variables
+    ROS_INFO("Total number of NLP variables");
     int NV = state_dim_*(num_shooting_nodes_+1) + control_dim_*num_shooting_nodes_;
 
     // Declare variable vector for the NLP
@@ -552,7 +571,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         offset += control_dim_;
     }
 
-    // State at end
+    ROS_INFO("State at end");
     X.push_back(V.nz(Slice(offset,offset+state_dim_)));
     v_min.insert(v_min.end(), xf_min.begin(), xf_min.end());
     v_max.insert(v_max.end(), xf_max.begin(), xf_max.end());
