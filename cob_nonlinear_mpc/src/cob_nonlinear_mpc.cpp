@@ -375,10 +375,27 @@ bool CobNonlinearMPC::initialize()
         fk_vector_.push_back(fk_); // stacks up multiplied transformation until link n
     }
 
-
-    for(int i = 0; i < control_dim_; i++)
+    vector<double> tmp;
+    for(int k=0; k < num_shooting_nodes_; ++k)
     {
-        u_init_.push_back(0);
+        tmp.clear();
+        for(int i=0; i < control_dim_; ++i)
+        {
+            tmp.push_back(0);
+        }
+        u_open_loop_.push_back(tmp);
+    }
+
+    for(int k=1; k <= num_shooting_nodes_; ++k)
+    {
+        tmp.clear();
+
+        for(int i=0; i < state_dim_; ++i)
+        {
+            tmp.push_back(0);
+        }
+
+        x_open_loop_.push_back(tmp);
     }
 
     joint_state_ = KDL::JntArray(7);
@@ -618,22 +635,6 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
 
-//    // Generate C-code
-//    F.generate("nmpc");
-//
-//    Importer("nmpc.c","clang");
-//
-//    // Compile the C-code to a shared library
-//    string compile_command = "gcc -fPIC -shared -O3 nmpc.c -o nmpc.so";
-//    int flag = system(compile_command.c_str());
-//    casadi_assert_message(flag==0, "Compilation failed");
-//
-////
-//    // Use CasADi's "external" to load the compiled function
-//    F = external("nmpc");
-//
-//    F = external("F", "./nmpc.so");
-
     // Total number of NLP variables
     int NV = state_dim_*(num_shooting_nodes_+1) + control_dim_*num_shooting_nodes_;
 
@@ -653,6 +654,9 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         // Local state
         X.push_back( V.nz(Slice(offset,offset+state_dim_)));
 
+        vector<double> x_ol;
+        x_ol = x_open_loop_.at(k);
+
         if(k==0)
         {
             v_min.insert(v_min.end(), x0_min.begin(), x0_min.end());
@@ -663,14 +667,18 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
             v_min.insert(v_min.end(), x_min.begin(), x_min.end());
             v_max.insert(v_max.end(), x_max.begin(), x_max.end());
         }
-        v_init.insert(v_init.end(), x_init.begin(), x_init.end());
+        v_init.insert(v_init.end(), x_ol.begin(), x_ol.end());
         offset += state_dim_;
 
-        // Local control
+        // Local control via shift initialization
         U.push_back( V.nz(Slice(offset,offset+control_dim_)));
         v_min.insert(v_min.end(), u_min.begin(), u_min.end());
         v_max.insert(v_max.end(), u_max.begin(), u_max.end());
-        v_init.insert(v_init.end(), u_init_.begin(), u_init_.end());
+
+        vector<double> u_ol;
+        u_ol = u_open_loop_.at(k);
+
+        v_init.insert(v_init.end(), u_ol.begin(), u_ol.end());
         offset += control_dim_;
     }
 
@@ -742,7 +750,8 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //    Eigen::VectorXd x_new = Eigen::VectorXd::Zero(state_dim_);
     vector<double> x_new;
     SX sx_x_new;
-    u_init_.clear();
+    u_open_loop_.clear();
+    x_open_loop_.clear();
     x_new.clear();
 
     for(int i=0; i<1; ++i)  // Copy only the first optimal control sequence
@@ -753,13 +762,57 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
             x_new.push_back(V_opt.at(j));
         }
     }
-
     sx_x_new = SX::vertcat({x_new});
     // Safe optimal control sequence at time t_k and take it as inital guess at t_k+1
-    for(int i=0; i < control_dim_; ++i)
+
+
+    vector<double> tmp;
+
+//    // Prepare state guess for next loop
+    for(int k=1; k <= num_shooting_nodes_; ++k)
     {
-        u_init_.push_back(q_dot(i));
-//        u_init_.push_back(V_opt.at(state_dim_ + control_dim_ + i));
+        tmp.clear();
+
+        if(k==num_shooting_nodes_)
+        {
+            for(int i=0; i < state_dim_; ++i)
+            {
+                tmp.push_back((double)V_opt.at((k)*(state_dim_+control_dim_) + i));
+            }
+        }
+        else
+        {
+            for(int i=0; i < state_dim_; ++i)
+            {
+                tmp.push_back((double)V_opt.at((k)*(state_dim_+control_dim_) + i));
+            }
+        }
+
+        x_open_loop_.push_back(tmp);
+    }
+
+
+    // Prepare control input guess for next loop
+    for(int k=1; k <= num_shooting_nodes_; ++k)
+    {
+        tmp.clear();
+
+        if(k==num_shooting_nodes_)
+        {
+            for(int i=0; i < control_dim_; ++i)
+            {
+                tmp.push_back((double)V_opt.at((k)*state_dim_ + i));
+            }
+        }
+        else
+        {
+            for(int i=0; i < control_dim_; ++i)
+            {
+                tmp.push_back((double)V_opt.at((k+1)*state_dim_ + i));
+            }
+        }
+
+        u_open_loop_.push_back(tmp);
     }
 
     geometry_msgs::Point point;

@@ -131,7 +131,8 @@ private:
 
     KDL::JntArray joint_state_;
     KDL::JntArray odometry_state_;
-    vector<double> u_init_;
+    vector<vector<double>> u_open_loop_;
+    vector<vector<double>> x_open_loop_;
 
     bool base_active_;
 
