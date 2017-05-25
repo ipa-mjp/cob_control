@@ -682,11 +682,13 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         offset += control_dim_;
     }
 
+    vector<double> x_ol;
+    x_ol = x_open_loop_.at(num_shooting_nodes_-1);
     // State at end
     X.push_back(V.nz(Slice(offset,offset+state_dim_)));
     v_min.insert(v_min.end(), xf_min.begin(), xf_min.end());
     v_max.insert(v_max.end(), xf_max.begin(), xf_max.end());
-    v_init.insert(v_init.end(), x_init.begin(), x_init.end());
+    v_init.insert(v_init.end(), x_ol.begin(), x_ol.end());
     offset += state_dim_;
 
     // Make sure that the size of the variable vector is consistent with the number of variables that we have referenced
@@ -769,22 +771,22 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     vector<double> tmp;
 
 //    // Prepare state guess for next loop
-    for(int k=1; k <= num_shooting_nodes_; ++k)
+    for(int k=0; k < num_shooting_nodes_; ++k)
     {
         tmp.clear();
 
-        if(k==num_shooting_nodes_)
+        if(k==num_shooting_nodes_-1)
         {
             for(int i=0; i < state_dim_; ++i)
             {
-                tmp.push_back((double)V_opt.at((k)*(state_dim_+control_dim_) + i));
+                tmp.push_back((double)V_opt.at(k * state_dim_ + i));
             }
         }
         else
         {
             for(int i=0; i < state_dim_; ++i)
             {
-                tmp.push_back((double)V_opt.at((k)*(state_dim_+control_dim_) + i));
+                tmp.push_back((double)V_opt.at(k * state_dim_ + i));
             }
         }
 
