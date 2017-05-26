@@ -527,6 +527,8 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         x_init.push_back(state(i));
     }
 
+    x_open_loop_.at(0) = x_init;
+
     vector<double> x_min  = state_path_constraints_min_;
     vector<double> x_max  = state_path_constraints_max_;
     vector<double> xf_min = state_terminal_constraints_min_;
@@ -779,14 +781,14 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         {
             for(int i=0; i < state_dim_; ++i)
             {
-                tmp.push_back((double)V_opt.at(k * state_dim_ + i));
+                tmp.push_back((double)V_opt.at((k+1) * (state_dim_+control_dim_) + i));
             }
         }
         else
         {
             for(int i=0; i < state_dim_; ++i)
             {
-                tmp.push_back((double)V_opt.at(k * state_dim_ + i));
+                tmp.push_back((double)V_opt.at((k+1) * (state_dim_+control_dim_) + i));
             }
         }
 
@@ -795,15 +797,15 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
 
     // Prepare control input guess for next loop
-    for(int k=1; k <= num_shooting_nodes_; ++k)
+    for(int k=0; k < num_shooting_nodes_; ++k)
     {
         tmp.clear();
 
-        if(k==num_shooting_nodes_)
+        if(k==num_shooting_nodes_-1)
         {
             for(int i=0; i < control_dim_; ++i)
             {
-                tmp.push_back((double)V_opt.at((k)*state_dim_ + i));
+                tmp.push_back((double)V_opt.at((k+1)*state_dim_ + i));
             }
         }
         else
