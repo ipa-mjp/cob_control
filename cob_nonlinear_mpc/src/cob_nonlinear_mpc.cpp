@@ -651,6 +651,8 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     // State at each shooting node and control for each shooting interval
     vector<MX> X, U;
+
+    ROS_INFO_STREAM("INIT");
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
         // Local state
@@ -658,6 +660,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
         vector<double> x_ol;
         x_ol = x_open_loop_.at(k);
+        ROS_INFO_STREAM(x_ol);
 
         if(k==0)
         {
@@ -773,51 +776,48 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     vector<double> tmp;
 
 //    // Prepare state guess for next loop
-    for(int k=0; k < num_shooting_nodes_; ++k)
+    for(int k=1; k < num_shooting_nodes_; k++)
     {
         tmp.clear();
 
-        if(k==num_shooting_nodes_-1)
+        for(int i=0; i < state_dim_; i++)
         {
-            for(int i=0; i < state_dim_; ++i)
-            {
-                tmp.push_back((double)V_opt.at((k+1) * (state_dim_+control_dim_) + i));
-            }
+            tmp.push_back((double)V_opt.at((k) * (state_dim_+control_dim_) + i));
         }
-        else
-        {
-            for(int i=0; i < state_dim_; ++i)
-            {
-                tmp.push_back((double)V_opt.at((k+1) * (state_dim_+control_dim_) + i));
-            }
-        }
-
         x_open_loop_.push_back(tmp);
-    }
 
+        if(k == num_shooting_nodes_-1)
+        {
+            x_open_loop_.push_back(tmp);
+        }
+    }
 
     // Prepare control input guess for next loop
-    for(int k=0; k < num_shooting_nodes_; ++k)
+    for(int k=1; k < num_shooting_nodes_; k++)
     {
         tmp.clear();
 
-        if(k==num_shooting_nodes_-1)
+        for(int i=0; i < control_dim_; i++)
         {
-            for(int i=0; i < control_dim_; ++i)
-            {
-                tmp.push_back((double)V_opt.at((k+1)*state_dim_ + i));
-            }
+            tmp.push_back((double)V_opt.at((k+1) * (state_dim_+control_dim_) + (i-control_dim_)));
         }
-        else
-        {
-            for(int i=0; i < control_dim_; ++i)
-            {
-                tmp.push_back((double)V_opt.at((k+1)*state_dim_ + i));
-            }
-        }
-
         u_open_loop_.push_back(tmp);
+
+        if(k == num_shooting_nodes_-1)
+        {
+            u_open_loop_.push_back(tmp);
+        }
     }
+//
+    ROS_INFO_STREAM("Afterwards");
+    for(int i=0; i<x_open_loop_.size(); i++)
+    {
+        ROS_INFO_STREAM(x_open_loop_.at(i));
+    }
+//    for(int i=0; i<u_open_loop_.size(); i++)
+//    {
+//        ROS_INFO_STREAM("controls \n" << u_open_loop_.at(i));
+//    }
 
     geometry_msgs::Point point;
     point.x = 0;
