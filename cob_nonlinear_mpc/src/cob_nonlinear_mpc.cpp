@@ -333,6 +333,7 @@ bool CobNonlinearMPC::initialize()
 
     for(int i = 0; i < control_dim_; i++)
     {
+        ROS_INFO_STREAM("CONTROL DIM: "<<control_dim_);
         u_init_.push_back(0);
     }
 
@@ -361,22 +362,30 @@ void CobNonlinearMPC::FrameTrackerCallback(const geometry_msgs::Pose::ConstPtr& 
     geometry_msgs::Twist base_vel_msg;
     std_msgs::Float64MultiArray vel_msg;
 
-    base_vel_msg.linear.x = qdot(0);
-    base_vel_msg.linear.y = qdot(1);
-    base_vel_msg.linear.z = 0;
-    base_vel_msg.angular.x = 0;
-    base_vel_msg.angular.y = 0;
-    base_vel_msg.angular.z = qdot(2);
+    if(base_active_){
+        base_vel_msg.linear.x = qdot(0);
+        base_vel_msg.linear.y = qdot(1);
+        base_vel_msg.linear.z = 0;
+        base_vel_msg.angular.x = 0;
+        base_vel_msg.angular.y = 0;
+        base_vel_msg.angular.z = qdot(2);
 
-    base_vel_pub_.publish(base_vel_msg);
+        base_vel_pub_.publish(base_vel_msg);
 
+        for (unsigned int i = 3; i < joint_state_.rows()+3; i++)
+        {
+            vel_msg.data.push_back(qdot(i));
+        }
+        pub_.publish(vel_msg);
 
-    for (unsigned int i = 3; i < 10; i++)
-    {
-        vel_msg.data.push_back(qdot(i));
     }
-    pub_.publish(vel_msg);
-
+    else{
+        for (unsigned int i = 0; i < joint_state_.rows(); i++)
+        {
+            vel_msg.data.push_back(qdot(i));
+        }
+        pub_.publish(vel_msg);
+    }
 }
 
 
@@ -422,7 +431,7 @@ KDL::JntArray CobNonlinearMPC::getJointState()
 {
     KDL:: JntArray tmp(joint_state_.rows() + odometry_state_.rows());
 
-    ROS_INFO("STATE SIZE: %i", tmp.rows());
+    ROS_INFO("STATE SIZE: %i Odometry State SIze %i", tmp.rows(), odometry_state_.rows());
 
     for(int i = 0; i < odometry_state_.rows(); i++)
     {
@@ -506,7 +515,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     SX error_attitute = SX::vertcat({ e_quat(1), e_quat(2), e_quat(3)});
 
-    SX R = 0.005*SX::vertcat({1000, 1000, 1000, 1, 1, 1, 1, 1, 1, 1});
+    SX R = 0.005*SX::vertcat({1, 1, 1, 1, 1, 1, 1}); // needs to be changed to be generic wieghting
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
 
 //    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10 * dot(q_c - q_d, q_c - q_d) + energy + barrier;
