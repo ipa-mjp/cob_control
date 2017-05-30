@@ -628,7 +628,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //    q_c_inverse = q_c_inverse / sqrt(dot(q_c_inverse,q_c_inverse));
 
     SX error_attitute = SX::vertcat({ e_quat(1), e_quat(2), e_quat(3)});
-    SX R = 1*SX::vertcat({10, 10, 10, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
+    SX R = 1*SX::vertcat({100, 100, 1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
 
 //    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10 * dot(q_c - q_d, q_c - q_d) + energy + barrier;
@@ -660,7 +660,6 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
         vector<double> x_ol;
         x_ol = x_open_loop_.at(k);
-        ROS_INFO_STREAM(x_ol);
 
         if(k==0)
         {
@@ -809,11 +808,11 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         }
     }
 //
-    ROS_INFO_STREAM("Afterwards");
-    for(int i=0; i<x_open_loop_.size(); i++)
-    {
-        ROS_INFO_STREAM(x_open_loop_.at(i));
-    }
+//    ROS_INFO_STREAM("Afterwards");
+//    for(int i=0; i<x_open_loop_.size(); i++)
+//    {
+//        ROS_INFO_STREAM(x_open_loop_.at(i));
+//    }
 //    for(int i=0; i<u_open_loop_.size(); i++)
 //    {
 //        ROS_INFO_STREAM("controls \n" << u_open_loop_.at(i));
