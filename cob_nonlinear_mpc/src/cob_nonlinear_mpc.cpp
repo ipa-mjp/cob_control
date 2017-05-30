@@ -518,8 +518,8 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX R = 0.005*SX::vertcat({1, 1, 1, 1, 1, 1, 1}); // needs to be changed to be generic wieghting
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
 
-//    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10 * dot(q_c - q_d, q_c - q_d) + energy + barrier;
-    SX L = 10*dot(p_c-x_d,p_c-x_d) + 10 * dot(error_attitute,error_attitute) + energy;// + barrier;
+    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10 * dot(q_c - q_d, q_c - q_d) + energy ;//+ barrier;
+//    SX L = 10*dot(p_c-x_d,p_c-x_d) + 10 * dot(error_attitute,error_attitute) + energy;// + barrier;
 
     ROS_INFO("Create Euler integrator function");
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -541,6 +541,9 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //    F = external("F", "./nmpc.so");
 
     ROS_INFO("Total number of NLP variables");
+    ROS_INFO("state_dim_: %i", state_dim_);
+    ROS_INFO("num_shooting_nodes_: % i", num_shooting_nodes_);
+    ROS_INFO("control_dim_: %i", control_dim_);
     int NV = state_dim_*(num_shooting_nodes_+1) + control_dim_*num_shooting_nodes_;
 
     // Declare variable vector for the NLP
@@ -561,11 +564,13 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
         if(k==0)
         {
+            ROS_INFO_STREAM("INITIAL CONDITION: "<<x0_min<< "SIZE: " << x0_min.size());
             v_min.insert(v_min.end(), x0_min.begin(), x0_min.end());
             v_max.insert(v_max.end(), x0_max.begin(), x0_max.end());
         }
         else
         {
+            ROS_INFO_STREAM("STATE CONDITION: "<<x_min<< "SIZE: " << x_min.size());
             v_min.insert(v_min.end(), x_min.begin(), x_min.end());
             v_max.insert(v_max.end(), x_max.begin(), x_max.end());
         }
@@ -574,6 +579,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
         // Local control
         U.push_back( V.nz(Slice(offset,offset+control_dim_)));
+        ROS_INFO_STREAM("CONTROL CONDITION: "<<u_min<< "SIZE: " << u_min.size());
         v_min.insert(v_min.end(), u_min.begin(), u_min.end());
         v_max.insert(v_max.end(), u_max.begin(), u_max.end());
         v_init.insert(v_init.end(), u_init_.begin(), u_init_.end());
@@ -582,14 +588,16 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     ROS_INFO("State at end");
     X.push_back(V.nz(Slice(offset,offset+state_dim_)));
+    ROS_INFO_STREAM("FINAL STATE CONDITION: "<<xf_min << "SIZE: " << xf_min.size());
     v_min.insert(v_min.end(), xf_min.begin(), xf_min.end());
     v_max.insert(v_max.end(), xf_max.begin(), xf_max.end());
     v_init.insert(v_init.end(), x_init.begin(), x_init.end());
     offset += state_dim_;
-
+    ROS_INFO("offset:%i",offset);
+    ROS_INFO("NV:%i",NV);
     // Make sure that the size of the variable vector is consistent with the number of variables that we have referenced
     casadi_assert(offset==NV);
-
+    ROS_INFO("NV:%i",NV);
     // Objective function
     MX J = 0;
 
@@ -609,7 +617,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         J += I_out.at("qf");
     }
 
-    // NLP
+    ROS_INFO("Building NLP solver...");
     MXDict nlp = {{"x", V}, {"f", J}, {"g", vertcat(g)}};
 
     // Set options
@@ -636,9 +644,9 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     arg["ubg"] = 0;
     arg["x0"] = v_init;
 
-    // Solve the problem
+    ROS_INFO("Solving...");
     res = solver(arg);
-
+    ROS_INFO("Accessing solution...");
     // Optimal solution of the NLP
     vector<double> V_opt(res.at("x"));
     vector<double> J_opt(res.at("f"));
@@ -650,8 +658,8 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX sx_x_new;
     u_init_.clear();
     x_new.clear();
-
-    for(int i=0; i<1; ++i)  // Copy only the first optimal control sequence
+    ROS_INFO("Copy only the first optimal control sequence");
+    for(int i=0; i<1; ++i)  //
     {
         for(int j=0; j<control_dim_; ++j)
         {
@@ -661,7 +669,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     }
 
     sx_x_new = SX::vertcat({x_new});
-    // Safe optimal control sequence at time t_k and take it as inital guess at t_k+1
+    ROS_INFO("Safe optimal control sequence at time t_k and take it as inital guess at t_k+1");
     for(int i=0; i < control_dim_; ++i)
     {
         u_init_.push_back(q_dot(i));
@@ -687,9 +695,20 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     Function fk_test = Function("fk_", {x_}, {p_c});
 
-    SX p_base = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)});
+    if(base_active_){
+        SX p_base = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)});
 
-    Function fk_test_base = Function("fk_base_", {x_}, {p_base});
+        Function fk_test_base = Function("fk_base_", {x_}, {p_base});
+
+        SX test_base = fk_test_base(sx_x_new).at(0);
+        vector<double> base_vec;
+        base_vec.clear();
+        base_vec.push_back((double)test_base(0));
+        base_vec.push_back((double)test_base(1));
+        base_vec.push_back((double)test_base(2));
+
+        ROS_WARN_STREAM("BASE Position: \n" << base_vec);
+    }
     vector<double> state_vec;
     for(int i = 0; i < state.rows(); i++)
     {
@@ -700,13 +719,6 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     SX test_v = fk_test(sx_x_new).at(0);
 
-    SX test_base = fk_test_base(sx_x_new).at(0);
-    vector<double> base_vec;
-    base_vec.clear();
-    base_vec.push_back((double)test_base(0));
-    base_vec.push_back((double)test_base(1));
-    base_vec.push_back((double)test_base(2));
-
     state_vec.clear();
     state_vec.push_back((double)test_v(0));
     state_vec.push_back((double)test_v(1));
@@ -714,7 +726,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     ROS_INFO_STREAM("Joint values:" <<x_new);
     ROS_WARN_STREAM("Goal: \n" << pose.position.x <<", " << pose.position.y << ", " << pose.position.z);
     ROS_WARN_STREAM("Current Position: \n" << state_vec);
-    ROS_WARN_STREAM("BASE Position: \n" << base_vec);
+
 //    ROS_WARN_STREAM(q_dot);
     return q_dot;
 }
