@@ -628,11 +628,14 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //    q_c_inverse = q_c_inverse / sqrt(dot(q_c_inverse,q_c_inverse));
 
     SX error_attitute = SX::vertcat({ e_quat(1), e_quat(2), e_quat(3)});
-    SX R = 1*SX::vertcat({100, 100, 1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
+    SX R = 1*SX::vertcat({100, 100, 100, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
 
+    SX S = 0.1*SX::vertcat({0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
+    SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
+
 //    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10 * dot(q_c - q_d, q_c - q_d) + energy + barrier;
-    SX L = 10*dot(p_c-x_d,p_c-x_d) + energy + 10 * dot(error_attitute,error_attitute) + barrier;
+    SX L = 10*dot(p_c-x_d,p_c-x_d) + energy + 10 * dot(error_attitute,error_attitute) + barrier + motion;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -723,7 +726,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     // Set options
     Dict opts;
 
-    opts["ipopt.tol"] = 1e-5;
+    opts["ipopt.tol"] = 1e-4;
     opts["ipopt.max_iter"] = 20;
 //    opts["ipopt.hessian_approximation"] = "limited-memory";
 //    opts["ipopt.hessian_constant"] = "yes";
