@@ -67,8 +67,14 @@ struct T_BVH
 {
     SX T;
     SX BVH_p;
-
+    string link;
     bool constraint = false;
+};
+
+struct KDL_frame
+{
+    string link;
+    KDL::Frame frame;
 };
 
 
@@ -79,6 +85,7 @@ private:
     std::vector<std::string> transformation_names_;
     std::vector<std::string> transformation_names_base_;
     std::vector<std::string> joint_names;
+
 
     std::string chain_base_link_;
     std::string chain_tip_link_;
@@ -97,6 +104,9 @@ private:
 
     std::vector<T_BVH> transform_vec_bvh_;
     std::vector<SX> transform_base_vec_;
+
+//    std::vector<vector<SX>> bvh_matrix;
+    std::map<string,vector<SX>> bvh_matrix;
     int state_dim_;
     int control_dim_;
     int num_shooting_nodes_;

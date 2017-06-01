@@ -259,7 +259,6 @@ bool CobNonlinearMPC::initialize()
         ROS_INFO_STREAM("Chain frame "<< " X: " << F.p.x()<< " Y: " << F.p.y()<< " Z: "<<F.p.z());
         ROS_INFO_STREAM("Chain frame "<< " ROLL: " << roll<< " PITCH: " << pitch<< " YAW: "<<yaw);
 
-
     }
 
     // JointNames
@@ -274,43 +273,66 @@ bool CobNonlinearMPC::initialize()
 
     KDL::Vector pos;
     KDL::Rotation rot;
-    std::vector<KDL::Frame> joint_frames;
-    std::vector<KDL::Frame> F_previous;
+    std::vector<KDL_frame> joint_frames;
+    std::vector<KDL_frame> F_previous;
+
+
     for (uint16_t i = 0; i < chain_.getNrOfSegments(); i++)
     {
+        KDL_frame f;
         if(joints[i].getType()==8)
         {
             ROS_INFO("Fixed joint");
             ROS_INFO_STREAM("Chain segment "<< chain_.getSegment(i).getName());
             if(i==0)
-                F_previous.push_back(chain_.getSegment(i).getFrameToTip());
+            {
+                f.frame = chain_.getSegment(i).getFrameToTip();
+                f.link = chain_.getSegment(i).getName();
+                F_previous.push_back(f);
+            }
             else
-                F_previous.push_back(F_previous.at(i-1)*chain_.getSegment(i).getFrameToTip());
-
-            ROS_INFO_STREAM("Joint position "<< " X: " << F_previous.at(i).p.x()<< " Y: " << F_previous.at(i).p.y()<< " Z: " << F_previous.at(i).p.z());
-            rot=F_previous.at(i).M;
-            ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
-            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << F_previous.at(i).p.x()<< " Y: " << F_previous.at(i).p.y()<< " Z: " << F_previous.at(i).p.z());
+            {
+                f.frame = F_previous.at(i-1).frame*chain_.getSegment(i).getFrameToTip();
+                f.link = chain_.getSegment(i).getName();
+                F_previous.push_back(f);
+            }
+//            ROS_INFO_STREAM("Joint position "<< " X: " << F_previous.at(i).p.x()<< " Y: " << F_previous.at(i).p.y()<< " Z: " << F_previous.at(i).p.z());
+            rot=F_previous.at(i).frame.M;
+//            ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
+//            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << F_previous.at(i).p.x()<< " Y: " << F_previous.at(i).p.y()<< " Z: " << F_previous.at(i).p.z());
         }
-        if(joints[i].getType()==0){
+
+        if(joints[i].getType()==0)
+        {
+            KDL_frame f;
             ROS_INFO("Rotational joint");
             ROS_INFO_STREAM("Joint name "<< chain_.getSegment(i).getJoint().getName());
-            F_previous.push_back(F_previous.at(i-1)*chain_.getSegment(i).getFrameToTip());
-            pos=F_previous.at(i).p;
-            if(joint_frames.size()==0){
-                ROS_INFO("FIRST JOINT");
+            f.frame = F_previous.at(i-1).frame*chain_.getSegment(i).getFrameToTip();
+            f.link = chain_.getSegment(i).getName();
+
+            F_previous.push_back(f);
+            pos=F_previous.at(i).frame.p;
+            if(joint_frames.size()==0)
+            {
+//                ROS_INFO("FIRST JOINT");
                 joint_frames.push_back(F_previous.at(i));
-                rot=F_previous.at(i).M;
-                pos=F_previous.at(i).p;
+                rot=F_previous.at(i).frame.M;
+                pos=F_previous.at(i).frame.p;
             }
-            else{
-                joint_frames.push_back(chain_.getSegment(i).getFrameToTip());
+            else
+            {
+                f.frame = chain_.getSegment(i).getFrameToTip();
+                f.link = chain_.getSegment(i).getName();
+
+                joint_frames.push_back(f);
                 rot=chain_.getSegment(i).getFrameToTip().M;
                 pos=chain_.getSegment(i).getFrameToTip().p;
             }
-            ROS_INFO_STREAM("Joint position "<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
-            ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
-            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());            //F_previous.p= pos;
+
+//
+//            ROS_INFO_STREAM("Joint position "<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
+//            ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
+//            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());            //F_previous.p= pos;
         }
     }
 
@@ -324,11 +346,11 @@ bool CobNonlinearMPC::initialize()
 
     fk_base_ = T;
 
-    for(int i=0;i<joint_frames.size();i++){
-
-        rot=joint_frames.at(i).M;
-        pos=joint_frames.at(i).p;
-        ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",joint_frames.at(i)(0,0),joint_frames.at(i)(0,1),joint_frames.at(i)(0,2),joint_frames.at(i)(1,0),joint_frames.at(i)(1,1),joint_frames.at(i)(1,2),joint_frames.at(i)(2,0),joint_frames.at(i)(2,1),joint_frames.at(i)(2,2));
+    for(int i=0;i<joint_frames.size();i++)
+    {
+        rot=joint_frames.at(i).frame.M;
+        pos=joint_frames.at(i).frame.p;
+        ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",joint_frames.at(i).frame(0,0),joint_frames.at(i).frame(0,1),joint_frames.at(i).frame(0,2),joint_frames.at(i).frame(1,0),joint_frames.at(i).frame(1,1),joint_frames.at(i).frame(1,2),joint_frames.at(i).frame(2,0),joint_frames.at(i).frame(2,1),joint_frames.at(i).frame(2,2));
         ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
         T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
         T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
@@ -342,8 +364,19 @@ bool CobNonlinearMPC::initialize()
         T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
 
         T_BVH p;
+        p.link = joint_frames.at(i).link;
         p.T = T;
 
+        if(pos.z() > 0.1)
+        {
+            T(2,3) = T(2,3)/2;
+            p.constraint = true;
+        }
+        else
+        {
+            p.constraint = false;
+        }
+        p.BVH_p = T;
         transform_vec_bvh_.push_back(p);
     }
 
@@ -375,6 +408,59 @@ bool CobNonlinearMPC::initialize()
         fk_vector_.push_back(fk_); // stacks up multiplied transformation until link n
     }
 
+    // Get bounding volume forward kinematics
+    for(int i=0; i<transform_vec_bvh_.size(); i++)
+    {
+        T_BVH bvh = transform_vec_bvh_.at(i);
+
+        if(i-1<0)
+        {
+            SX transform = mtimes(fk_vector_.at(i),bvh.T);
+            std::vector<SX> tmp;
+            for(int k=0; k<3; k++)
+            {
+                tmp.push_back(transform(k,3));
+            }
+            bvh_matrix[bvh.link] = tmp;
+
+            if(bvh.constraint)
+            {
+                tmp.clear();
+                transform = mtimes(fk_vector_.at(i),bvh.BVH_p);
+
+                for(int k=0; k<3; k++)
+                {
+                    tmp.push_back(transform(k,3));
+                }
+                bvh_matrix[bvh.link] = tmp;
+            }
+        }
+        else
+        {
+            SX transform = mtimes(fk_vector_.at(i-1),bvh.T);
+            std::vector<SX> tmp;
+            for(int k=0; k<3; k++)
+            {
+                tmp.push_back(transform(k,3));
+            }
+            bvh_matrix[bvh.link] = tmp;
+
+            if(bvh.constraint)
+            {
+                tmp.clear();
+                transform = mtimes(fk_vector_.at(i-1),bvh.BVH_p);
+
+                for(int k=0; k<3; k++)
+                {
+                    tmp.push_back(transform(k,3));
+                }
+                bvh_matrix[bvh.link] = tmp;
+            }
+        }
+
+    }
+
+    ROS_WARN_STREAM(bvh_matrix);
     vector<double> tmp;
     for(int k=0; k < num_shooting_nodes_; ++k)
     {
@@ -432,15 +518,9 @@ void CobNonlinearMPC::poseCallback(const geometry_msgs::Pose::ConstPtr& msg)
 
     for (unsigned int i = 3; i < 10; i++)
     {
-        vel_msg.data.push_back(qdot(i));
+        vel_msg.data.push_back((double)qdot(i));
     }
     pub_.publish(vel_msg);
-
-//    for (unsigned int i = 0; i < 7; i++)
-//    {
-//        vel_msg.data.push_back(static_cast<double>(qdot(i)));
-//    }
-//    pub_.publish(vel_msg);
 }
 
 
@@ -562,13 +642,46 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX bvh_p6 = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+1.4});
 
     // Prevent collision with Base_link
-    SX barrier;
+    SX barrier, barrier_arm;
     SX dist;
-//    SX dist = dot(p_c,p_c);
-//    barrier = exp((min_dist - sqrt(dist))/0.01);
-//
-//    SX BVH_barrier;
-//
+
+    std::vector<std::string> collisionCheckLinkNames{"arm_left_7_link"};
+    std::vector<std::string> potentialCollisionLinks{"arm_left_2_link"};
+
+    std::map<string,vector<SX>>::iterator it;
+    std::map<string,vector<SX>>::iterator it_pcl;
+
+
+    // ToDo: Selfcollision Matrix hier einbauen.
+    int counter = 0;
+    for ( it = bvh_matrix.begin(); it != bvh_matrix.end(); it++ )
+    {
+        string ccl = it->first;
+        if (std::find(std::begin(collisionCheckLinkNames), std::end(collisionCheckLinkNames), ccl) != std::end(collisionCheckLinkNames))
+        {
+            for ( it_pcl = bvh_matrix.begin(); it_pcl != bvh_matrix.end(); it_pcl++ )
+            {
+                string pcl = it_pcl->first;
+                if (std::find(std::begin(potentialCollisionLinks), std::end(potentialCollisionLinks), pcl) != std::end(potentialCollisionLinks))
+                {
+                    SX p1 = SX::vertcat({it->second.at(0), it->second.at(1), it->second.at(2)});
+                    SX p2 = SX::vertcat({it_pcl->second.at(0), it_pcl->second.at(1), it_pcl->second.at(2)});
+                    dist = dot(p1 - p2, p1 - p2);
+                    if(counter == 0)
+                    {
+                        barrier_arm = exp((0.15 - sqrt(dist))/0.01);
+                        counter = 1;
+                    }
+                    else
+                    {
+                        barrier_arm += exp((0.15 - sqrt(dist))/0.01);
+                    }
+                }
+            }
+        }
+    }
+
+    ROS_WARN_STREAM(barrier_arm);
 
 
     for(int i = 0; i < fk_vector_.size(); i++)
@@ -620,22 +733,22 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
             }
         }
     }
+
+    // Get orientation error
     SX q_c_inverse = SX::vertcat({q_c(0), -q_c(1), -q_c(2), -q_c(3)});
-//    q_c_inverse = q_c_inverse / sqrt(dot(q_c_inverse,q_c_inverse));
-
     SX e_quat= quaternion_product(q_c_inverse,q_d);
-
-//    q_c_inverse = q_c_inverse / sqrt(dot(q_c_inverse,q_c_inverse));
-
     SX error_attitute = SX::vertcat({ e_quat(1), e_quat(2), e_quat(3)});
+
+    // L2 norm of the control signal
     SX R = 1*SX::vertcat({100, 100, 100, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
 
+    // L2 norm of the states
     SX S = 0.1*SX::vertcat({0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
     SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
 
-//    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10 * dot(q_c - q_d, q_c - q_d) + energy + barrier;
-    SX L = 10*dot(p_c-x_d,p_c-x_d) + energy + 10 * dot(error_attitute,error_attitute) + barrier + motion;
+    // Objective
+    SX L = 10*dot(p_c-x_d,p_c-x_d) + energy + 10 * dot(error_attitute,error_attitute) + barrier_arm + barrier;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -655,7 +768,6 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     // State at each shooting node and control for each shooting interval
     vector<MX> X, U;
 
-    ROS_INFO_STREAM("INIT");
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
         // Local state
@@ -733,7 +845,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     opts["ipopt.linear_solver"] = "ma27";
     opts["ipopt.print_level"] = 0;
     opts["print_time"] = true;
-    opts["expand"] = true;  // Removes overhead, not sure if this command does the same as in the create_integrator function !
+    opts["expand"] = true;  // Removes overhead
 
     // Create an NLP solver and buffers
     Function solver = nlpsol("nlpsol", "ipopt", nlp, opts);
@@ -772,8 +884,6 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         }
     }
     sx_x_new = SX::vertcat({x_new});
-    // Safe optimal control sequence at time t_k and take it as inital guess at t_k+1
-
 
     vector<double> tmp;
 
@@ -810,17 +920,9 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
             u_open_loop_.push_back(tmp);
         }
     }
-//
-//    ROS_INFO_STREAM("Afterwards");
-//    for(int i=0; i<x_open_loop_.size(); i++)
-//    {
-//        ROS_INFO_STREAM(x_open_loop_.at(i));
-//    }
-//    for(int i=0; i<u_open_loop_.size(); i++)
-//    {
-//        ROS_INFO_STREAM("controls \n" << u_open_loop_.at(i));
-//    }
 
+
+    // Plot bounding volumes
     geometry_msgs::Point point;
     point.x = 0;
     point.y = 0;
@@ -838,55 +940,56 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     point.y = (double)result(1);
     point.z = (double)result(2);
 
-    visualizeBVH(point, 0.4, 1);
+    visualizeBVH(point, 0.4, 10);
 
     result = fk_sx2(sx_x_new).at(0);
     point.x = (double)result(0);
     point.y = (double)result(1);
     point.z = (double)result(2);
 
-    visualizeBVH(point, 0.25, 2);
+    visualizeBVH(point, 0.25, 12);
 
     result = fk_sx3(sx_x_new).at(0);
     point.x = (double)result(0);
     point.y = (double)result(1);
     point.z = (double)result(2);
 
-    visualizeBVH(point, 0.2, 3);
+    visualizeBVH(point, 0.2, 13);
 
     result = fk_sx4(sx_x_new).at(0);
     point.x = (double)result(0);
     point.y = (double)result(1);
     point.z = (double)result(2);
 
-    visualizeBVH(point, 0.2, 4);
+    visualizeBVH(point, 0.2, 14);
 
     result = fk_sx5(sx_x_new).at(0);
     point.x = (double)result(0);
     point.y = (double)result(1);
     point.z = (double)result(2);
 
-    visualizeBVH(point, 0.2, 5);
+    visualizeBVH(point, 0.2, 15);
 
     result = fk_sx6(sx_x_new).at(0);
     point.x = (double)result(0);
     point.y = (double)result(1);
     point.z = (double)result(2);
 
-    visualizeBVH(point, 0.25, 6);
+    visualizeBVH(point, 0.25, 16);
 
-//    for(int i = 0; i < bvh_points_.size(); i++)
-//    {
-//        Function fk_sx = Function("fk_sx", {x_}, {bvh_points_.at(i)});
-//
-//        SX result = fk_sx(sx_x_new).at(0);
-//        point.x = (double)result(0);
-//        point.y = (double)result(1);
-//        point.z = (double)result(2);
-//
-//        visualizeBVH(point, min_dist, i);
-//    }
 
+
+    for(int i=0; i<collisionCheckLinkNames.size(); i++)
+    {
+        SX test = SX::horzcat({bvh_matrix[collisionCheckLinkNames.at(i)].at(0), bvh_matrix[collisionCheckLinkNames.at(i)].at(1), bvh_matrix[collisionCheckLinkNames.at(i)].at(2)});
+        Function tesssst = Function("test", {x_}, {test});
+        result = tesssst(sx_x_new).at(0);
+        point.x = (double)result(0);
+        point.y = (double)result(1);
+        point.z = (double)result(2);
+
+        visualizeBVH(point, 0.15, i);
+    }
     return q_dot;
 }
 
