@@ -106,11 +106,18 @@ private:
     std::vector<SX> transform_base_vec_;
 
 //    std::vector<vector<SX>> bvh_matrix;
-    std::map<string,vector<SX>> bvh_matrix;
+    std::map<string,vector<vector<SX>>> bvh_matrix;
     int state_dim_;
     int control_dim_;
     int num_shooting_nodes_;
     double time_horizon_;
+
+    XmlRpc::XmlRpcValue scm_;
+    XmlRpc::XmlRpcValue bvb_;
+
+    std::unordered_map<std::string, std::vector<std::string> > self_collision_map_;
+    vector<double> bvb_positions_;
+    vector<double> bvb_radius_;
 
     visualization_msgs::MarkerArray marker_array_;
 

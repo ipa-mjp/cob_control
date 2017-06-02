@@ -163,7 +163,6 @@ bool CobNonlinearMPC::initialize()
         }
     }
 
-
     // nh_nmpc_dh
     for(unsigned int i = 0; i < transformation_names_.size(); i++)
     {
@@ -200,6 +199,60 @@ bool CobNonlinearMPC::initialize()
 
         dh_params.push_back(param);
     }
+
+    if (!nh_.getParam("self_collision_matrix", scm_))
+    {
+        ROS_ERROR("Parameter 'self_collision_matrix' not set");
+        return false;
+    }
+
+    for (XmlRpc::XmlRpcValue::iterator it = scm_.begin(); it != scm_.end(); ++it)
+    {
+        std::vector<std::string> empty_vec;
+        self_collision_map_[it->first] = empty_vec;
+        ROS_ASSERT(it->second.getType() == XmlRpc::XmlRpcValue::TypeArray);
+        for (int j=0; j < it->second.size(); ++j)
+        {
+            ROS_ASSERT(it->second[j].getType() == XmlRpc::XmlRpcValue::TypeString);
+            self_collision_map_[it->first].push_back(it->second[j]);
+        }
+    }
+
+    if(base_active_)
+    {
+        if (!nh_.getParam("bounding_volume_base", bvb_))
+        {
+            ROS_ERROR("Parameter 'bounding_volume_base' not set");
+            return false;
+        }
+
+        for (XmlRpc::XmlRpcValue::iterator it = bvb_.begin(); it != bvb_.end(); ++it)
+        {
+            if(it->first == "position")
+            {
+                for (int j=0; j < it->second.size(); ++j)
+                {
+                    ROS_ASSERT(it->second[j].getType() == XmlRpc::XmlRpcValue::TypeDouble);
+                    bvb_positions_.push_back(it->second[j]);
+                }
+            }
+            else if(it->first == "bv_radius")
+            {
+                for (int j=0; j < it->second.size(); ++j)
+                {
+                    ROS_ASSERT(it->second[j].getType() == XmlRpc::XmlRpcValue::TypeDouble);
+                    bvb_radius_.push_back(it->second[j]);
+                }
+            }
+            else
+            {
+                ROS_ERROR("Wrong bounding volume format");
+            }
+        }
+    }
+
+    ROS_WARN_STREAM(bvb_positions_);
+    ROS_WARN_STREAM(bvb_radius_);
 
     // Casadi symbolics
     u_ = SX::sym("u", state_dim_);  // control
@@ -412,55 +465,56 @@ bool CobNonlinearMPC::initialize()
     for(int i=0; i<transform_vec_bvh_.size(); i++)
     {
         T_BVH bvh = transform_vec_bvh_.at(i);
-
+        std::vector<SX> bvh_arm;
         if(i-1<0)
         {
             SX transform = mtimes(fk_vector_.at(i),bvh.T);
-            std::vector<SX> tmp;
-            for(int k=0; k<3; k++)
-            {
-                tmp.push_back(transform(k,3));
-            }
-            bvh_matrix[bvh.link] = tmp;
+            SX tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
+            bvh_arm.push_back(tmp);
+            bvh_matrix[bvh.link].push_back(bvh_arm);
 
             if(bvh.constraint)
             {
+                bvh_arm.clear();
                 tmp.clear();
                 transform = mtimes(fk_vector_.at(i),bvh.BVH_p);
-
-                for(int k=0; k<3; k++)
-                {
-                    tmp.push_back(transform(k,3));
-                }
-                bvh_matrix[bvh.link] = tmp;
+                tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
+                bvh_arm.push_back(tmp);
+                bvh_matrix[bvh.link].push_back(bvh_arm);
             }
         }
         else
         {
+            bvh_arm.clear();
             SX transform = mtimes(fk_vector_.at(i-1),bvh.T);
-            std::vector<SX> tmp;
-            for(int k=0; k<3; k++)
-            {
-                tmp.push_back(transform(k,3));
-            }
-            bvh_matrix[bvh.link] = tmp;
+            SX tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
+            bvh_arm.push_back(tmp);
+            bvh_matrix[bvh.link].push_back(bvh_arm);
+            bvh_arm.clear();
 
             if(bvh.constraint)
             {
                 tmp.clear();
                 transform = mtimes(fk_vector_.at(i-1),bvh.BVH_p);
-
-                for(int k=0; k<3; k++)
-                {
-                    tmp.push_back(transform(k,3));
-                }
-                bvh_matrix[bvh.link] = tmp;
+                tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
+                bvh_arm.push_back(tmp);
+                bvh_matrix[bvh.link].push_back(bvh_arm);
             }
+        }
+    }
+    if(base_active_)
+    {
+        for(int i=0; i<bvb_positions_.size(); i++)
+        {
+            std::vector<SX> base_bvh;
+            SX tmp = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+bvb_positions_.at(i)});
+            base_bvh.push_back(tmp);
+            bvh_matrix["body"].push_back(base_bvh);
         }
 
     }
 
-    ROS_WARN_STREAM(bvh_matrix);
+
     vector<double> tmp;
     for(int k=0; k < num_shooting_nodes_; ++k)
     {
@@ -633,103 +687,54 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX x_d = SX::vertcat({pose.position.x, pose.position.y, pose.position.z});
     SX q_d = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
 
-    // Base constraint
-    SX bvh_p = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+0.1});
-    SX bvh_p2 = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+0.5});
-    SX bvh_p3 = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+0.7});
-    SX bvh_p4 = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+0.9});
-    SX bvh_p5 = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+1.1});
-    SX bvh_p6 = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+1.4});
-
     // Prevent collision with Base_link
-    SX barrier, barrier_arm;
+    SX barrier;
     SX dist;
 
-    std::vector<std::string> collisionCheckLinkNames{"arm_left_7_link"};
-    std::vector<std::string> potentialCollisionLinks{"arm_left_2_link"};
+    std::unordered_map<std::string, std::vector<std::string> >::iterator it_scm;
 
-    std::map<string,vector<SX>>::iterator it;
-    std::map<string,vector<SX>>::iterator it_pcl;
-
-
-    // ToDo: Selfcollision Matrix hier einbauen.
     int counter = 0;
-    for ( it = bvh_matrix.begin(); it != bvh_matrix.end(); it++ )
+    double bv_radius;
+
+    for( it_scm = self_collision_map_.begin(); it_scm != self_collision_map_.end(); it_scm++)
     {
-        string ccl = it->first;
-        if (std::find(std::begin(collisionCheckLinkNames), std::end(collisionCheckLinkNames), ccl) != std::end(collisionCheckLinkNames))
+        std::vector<string> scm_collision_links = it_scm->second;
+        for(int i=0; i<scm_collision_links.size(); i++)
         {
-            for ( it_pcl = bvh_matrix.begin(); it_pcl != bvh_matrix.end(); it_pcl++ )
+            ROS_WARN_STREAM(it_scm->first);
+            vector<vector<SX>> p1_mat = bvh_matrix[it_scm->first];
+            vector<vector<SX>> p2_mat = bvh_matrix[scm_collision_links.at(i)];
+
+            for(int k=0; k<p1_mat.size(); k++)
             {
-                string pcl = it_pcl->first;
-                if (std::find(std::begin(potentialCollisionLinks), std::end(potentialCollisionLinks), pcl) != std::end(potentialCollisionLinks))
+                if(it_scm->first == "body")
                 {
-                    SX p1 = SX::vertcat({it->second.at(0), it->second.at(1), it->second.at(2)});
-                    SX p2 = SX::vertcat({it_pcl->second.at(0), it_pcl->second.at(1), it_pcl->second.at(2)});
+                    bv_radius = bvb_radius_.at(k);
+                }
+                else
+                {
+                    bv_radius = 0.1;
+                }
+
+                vector<SX> p1_vec = p1_mat.at(k);
+                for(int m=0; m<p2_mat.size(); m++)
+                {
+                    vector<SX> p2_vec = p2_mat.at(m);
+
+                    SX p1 = SX::vertcat({p1_vec.at(0)});
+                    SX p2 = SX::vertcat({p2_vec.at(0)});
                     dist = dot(p1 - p2, p1 - p2);
+
                     if(counter == 0)
                     {
-                        barrier_arm = exp((0.15 - sqrt(dist))/0.01);
+                        barrier = exp((bv_radius - sqrt(dist))/0.01);
                         counter = 1;
                     }
                     else
                     {
-                        barrier_arm += exp((0.15 - sqrt(dist))/0.01);
+                        barrier += exp((bv_radius - sqrt(dist))/0.01);
                     }
                 }
-            }
-        }
-    }
-
-    ROS_WARN_STREAM(barrier_arm);
-
-
-    for(int i = 0; i < fk_vector_.size(); i++)
-    {
-        if(i>0)
-        {
-            SX tmp = fk_vector_.at(i);
-            SX p = SX::vertcat({tmp(0,3),tmp(1,3),tmp(2,3)});
-
-            if(i==1)
-            {
-                dist = dot(bvh_p - p,bvh_p - p);
-                barrier = exp((min_dist - sqrt(dist))/0.01);
-
-                dist = dot(bvh_p2 - p,bvh_p2 - p);
-                barrier += exp((0.25 - sqrt(dist))/0.01);
-
-                dist = dot(bvh_p3 - p,bvh_p3 - p);
-                barrier += exp((0.2 - sqrt(dist))/0.01);
-
-                dist = dot(bvh_p4 - p,bvh_p4 - p);
-                barrier += exp((0.2 - sqrt(dist))/0.01);
-
-                dist = dot(bvh_p5 - p,bvh_p5 - p);
-                barrier += exp((0.2 - sqrt(dist))/0.01);
-
-                dist = dot(bvh_p6 - p,bvh_p6 - p);
-                barrier += exp((0.25 - sqrt(dist))/0.01);
-            }
-            else
-            {
-                dist = dot(bvh_p - p,bvh_p - p);
-                barrier += exp((min_dist - sqrt(dist))/0.01);
-
-                dist = dot(bvh_p2 - p,bvh_p2 - p);
-                barrier += exp((0.25 - sqrt(dist))/0.01);
-
-                dist = dot(bvh_p3 - p,bvh_p3 - p);
-                barrier += exp((0.2 - sqrt(dist))/0.01);
-
-                dist = dot(bvh_p4 - p,bvh_p4 - p);
-                barrier += exp((0.2 - sqrt(dist))/0.01);
-
-                dist = dot(bvh_p5 - p,bvh_p5 - p);
-                barrier += exp((0.2 - sqrt(dist))/0.01);
-
-                dist = dot(bvh_p6 - p,bvh_p6 - p);
-                barrier += exp((0.25 - sqrt(dist))/0.01);
             }
         }
     }
@@ -748,7 +753,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
 
     // Objective
-    SX L = 10*dot(p_c-x_d,p_c-x_d) + energy + 10 * dot(error_attitute,error_attitute) + barrier_arm + barrier;
+    SX L = 10*dot(p_c-x_d,p_c-x_d) + energy + 10 * dot(error_attitute,error_attitute) + barrier;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -928,67 +933,49 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     point.y = 0;
     point.z = 0;
 
-    Function fk_sx = Function("fk_sx", {x_}, {bvh_p});
-    Function fk_sx2 = Function("fk_sx2", {x_}, {bvh_p2});
-    Function fk_sx3 = Function("fk_sx3", {x_}, {bvh_p3});
-    Function fk_sx4 = Function("fk_sx4", {x_}, {bvh_p4});
-    Function fk_sx5 = Function("fk_sx3", {x_}, {bvh_p5});
-    Function fk_sx6 = Function("fk_sx4", {x_}, {bvh_p6});
-
-    SX result = fk_sx(sx_x_new).at(0);
-    point.x = (double)result(0);
-    point.y = (double)result(1);
-    point.z = (double)result(2);
-
-    visualizeBVH(point, 0.4, 10);
-
-    result = fk_sx2(sx_x_new).at(0);
-    point.x = (double)result(0);
-    point.y = (double)result(1);
-    point.z = (double)result(2);
-
-    visualizeBVH(point, 0.25, 12);
-
-    result = fk_sx3(sx_x_new).at(0);
-    point.x = (double)result(0);
-    point.y = (double)result(1);
-    point.z = (double)result(2);
-
-    visualizeBVH(point, 0.2, 13);
-
-    result = fk_sx4(sx_x_new).at(0);
-    point.x = (double)result(0);
-    point.y = (double)result(1);
-    point.z = (double)result(2);
-
-    visualizeBVH(point, 0.2, 14);
-
-    result = fk_sx5(sx_x_new).at(0);
-    point.x = (double)result(0);
-    point.y = (double)result(1);
-    point.z = (double)result(2);
-
-    visualizeBVH(point, 0.2, 15);
-
-    result = fk_sx6(sx_x_new).at(0);
-    point.x = (double)result(0);
-    point.y = (double)result(1);
-    point.z = (double)result(2);
-
-    visualizeBVH(point, 0.25, 16);
-
-
-
-    for(int i=0; i<collisionCheckLinkNames.size(); i++)
+    SX result;
+    for( it_scm = self_collision_map_.begin(); it_scm != self_collision_map_.end(); it_scm++)
     {
-        SX test = SX::horzcat({bvh_matrix[collisionCheckLinkNames.at(i)].at(0), bvh_matrix[collisionCheckLinkNames.at(i)].at(1), bvh_matrix[collisionCheckLinkNames.at(i)].at(2)});
-        Function tesssst = Function("test", {x_}, {test});
-        result = tesssst(sx_x_new).at(0);
-        point.x = (double)result(0);
-        point.y = (double)result(1);
-        point.z = (double)result(2);
+        vector<string> tmp = it_scm->second;
 
-        visualizeBVH(point, 0.15, i);
+        for(int i=0; i<tmp.size();i++)
+        {
+            vector<vector<SX>> SX_vec = bvh_matrix[tmp.at(i)];
+            for(int k=0; k<SX_vec.size(); k++)
+            {
+                SX test = SX::horzcat({SX_vec.at(k).at(0)});
+                Function tesssst = Function("test", {x_}, {test});
+                result = tesssst(sx_x_new).at(0);
+                point.x = (double)result(0);
+                point.y = (double)result(1);
+                point.z = (double)result(2);
+
+                bv_radius = 0.1;
+                visualizeBVH(point, bv_radius, i+i*tmp.size());
+            }
+        }
+
+
+        vector<vector<SX>> SX_vec = bvh_matrix[it_scm->first];
+        for(int k=0; k<SX_vec.size(); k++)
+        {
+            SX test = SX::horzcat({SX_vec.at(k).at(0)});
+            Function tesssst = Function("test", {x_}, {test});
+            result = tesssst(sx_x_new).at(0);
+            point.x = (double)result(0);
+            point.y = (double)result(1);
+            point.z = (double)result(2);
+
+            if(it_scm->first == "body")
+            {
+                bv_radius = bvb_radius_.at(k);
+            }
+            else
+            {
+                bv_radius = 0.1;
+            }
+            visualizeBVH(point, bv_radius, k+tmp.size()+SX_vec.size());
+        }
     }
     return q_dot;
 }
