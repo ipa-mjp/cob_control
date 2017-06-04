@@ -186,6 +186,8 @@ public:
     SX dual_quaternion_product(SX q1, SX q2);
 
     bool process_KDL_tree();
+
+    void generate_symbolic_forward_kinematics();
 };
 
 

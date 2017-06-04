@@ -125,10 +125,6 @@ bool CobNonlinearMPC::initialize()
         return false;
     }
 
-    // Casadi symbolics
-    u_ = SX::sym("u", control_dim_);  // control
-    x_ = SX::sym("x", state_dim_); // states
-
     // Chain
     if (!nh_.getParam("chain_base_link", chain_base_link_))
     {
@@ -144,88 +140,7 @@ bool CobNonlinearMPC::initialize()
 
     this->process_KDL_tree();
 
-    SX T = SX::sym("T",4,4);
-	if(base_active_){
-        //Base config
-        T(0,0) = cos(x_(2)); T(0,1) = -sin(x_(2));  T(0,2) = 0.0; T(0,3) = x_(0);
-        T(1,0) = sin(x_(2)); T(1,1) = cos(x_(2));   T(1,2) = 0.0; T(1,3) = x_(1);
-        T(2,0) = 0.0;        T(2,1) = 0.0;          T(2,2) = 1.0; T(2,3) = 0;
-        T(3,0) = 0.0;        T(3,1) = 0.0;          T(3,2) = 0.0; T(3,3) = 1.0;
-
-        fk_base_ = T;
-
-    }
-    int offset;
-
-    for(int i=0;i<robot_.kinematic_chain.getNrOfSegments();i++){
-
-        KDL::Vector pos;
-        KDL::Rotation rot;
-        rot=robot_.kinematic_chain.getSegment(i).getFrameToTip().M;
-        pos=robot_.kinematic_chain.getSegment(i).getFrameToTip().p;
-#ifdef __DEBUG__
-        ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
-        ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
-#endif
-        if(base_active_){
-            T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
-            T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
-            T(0,2) = rot(0,2); T(0,3) = pos.x();
-            T(1,0) = rot(1,0)*cos(x_(i+3))+rot(1,1)*sin(x_(i+3));
-            T(1,1) = -rot(1,0)*sin(x_(i+3))+rot(1,1)*cos(x_(i+3));
-            T(1,2) = rot(1,2); T(1,3) = pos.y();
-            T(2,0) = rot(2,0)*cos(x_(i+3))+rot(2,1)*sin(x_(i+3));
-            T(2,1) = -rot(2,0)*sin(x_(i+3))+rot(2,1)*cos(x_(i+3));
-            T(2,2) = rot(2,2); T(2,3) = pos.z();
-            T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
-        }
-        else{
-            T(0,0) = rot(0,0)*cos(x_(i))+rot(0,1)*sin(x_(i));
-            T(0,1) = -rot(0,0)*sin(x_(i))+rot(0,1)*cos(x_(i));
-            T(0,2) = rot(0,2); T(0,3) = pos.x();
-            T(1,0) = rot(1,0)*cos(x_(i))+rot(1,1)*sin(x_(i));
-            T(1,1) = -rot(1,0)*sin(x_(i))+rot(1,1)*cos(x_(i));
-            T(1,2) = rot(1,2); T(1,3) = pos.y();
-            T(2,0) = rot(2,0)*cos(x_(i))+rot(2,1)*sin(x_(i));
-            T(2,1) = -rot(2,0)*sin(x_(i))+rot(2,1)*cos(x_(i));
-            T(2,2) = rot(2,2); T(2,3) = pos.z();
-            T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
-        }
-
-        T_BVH p;
-        p.link = robot_.kinematic_chain.getSegment(i).getName();
-        p.T = T;
-
-        transform_vec_bvh_.push_back(p);
-    }
-
-    // Get Endeffector FK
-    for(int i=0; i< transform_vec_bvh_.size(); i++)
-    {
-        if(base_active_)
-        {
-            if(i==0)
-            {   ROS_WARN("BASE IS ACTIVE");
-                fk_ = mtimes(fk_base_,transform_vec_bvh_.at(i).T);
-            }
-            else
-            {
-                fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
-            }
-        }
-        else
-        {
-            if(i==0)
-            {
-                fk_ = transform_vec_bvh_.at(i).T;
-            }
-            else
-            {
-                fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
-            }
-        }
-        fk_vector_.push_back(fk_); // stacks up multiplied transformation until link n
-    }
+    this->generate_symbolic_forward_kinematics();
 
     // Get bounding volume forward kinematics
     for(int i=0; i<transform_vec_bvh_.size(); i++)
@@ -441,6 +356,95 @@ bool CobNonlinearMPC::process_KDL_tree(){
             }
         }
 
+}
+
+void CobNonlinearMPC::generate_symbolic_forward_kinematics(){
+    // Casadi symbolics
+        u_ = SX::sym("u", control_dim_);  // control
+        x_ = SX::sym("x", state_dim_); // states
+
+        SX T = SX::sym("T",4,4);
+        if(base_active_){
+            ////generic rotation matrix around z and translation vector for x and y
+            T(0,0) = cos(x_(2)); T(0,1) = -sin(x_(2));  T(0,2) = 0.0; T(0,3) = x_(0);
+            T(1,0) = sin(x_(2)); T(1,1) = cos(x_(2));   T(1,2) = 0.0; T(1,3) = x_(1);
+            T(2,0) = 0.0;        T(2,1) = 0.0;          T(2,2) = 1.0; T(2,3) = 0;
+            T(3,0) = 0.0;        T(3,1) = 0.0;          T(3,2) = 0.0; T(3,3) = 1.0;
+            fk_base_ = T; //Base forward kinematics
+        }
+        int offset;
+
+        for(int i=0;i<robot_.kinematic_chain.getNrOfSegments();i++){
+
+            KDL::Vector pos;
+            KDL::Rotation rot;
+            rot=robot_.kinematic_chain.getSegment(i).getFrameToTip().M;
+            pos=robot_.kinematic_chain.getSegment(i).getFrameToTip().p;
+    #ifdef __DEBUG__
+            ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
+            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
+    #endif
+            if(base_active_){ // if base active first initial control variable belong to the base
+                // here each joint is considered to be revolute.. code needs to be updated for prismatic
+                //rotation matrix of the joint * homogenic transformation matrix of the next joint relative to the previous
+                T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
+                T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
+                T(0,2) = rot(0,2); T(0,3) = pos.x();
+                T(1,0) = rot(1,0)*cos(x_(i+3))+rot(1,1)*sin(x_(i+3));
+                T(1,1) = -rot(1,0)*sin(x_(i+3))+rot(1,1)*cos(x_(i+3));
+                T(1,2) = rot(1,2); T(1,3) = pos.y();
+                T(2,0) = rot(2,0)*cos(x_(i+3))+rot(2,1)*sin(x_(i+3));
+                T(2,1) = -rot(2,0)*sin(x_(i+3))+rot(2,1)*cos(x_(i+3));
+                T(2,2) = rot(2,2); T(2,3) = pos.z();
+                T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
+            }
+            else{
+                T(0,0) = rot(0,0)*cos(x_(i))+rot(0,1)*sin(x_(i));
+                T(0,1) = -rot(0,0)*sin(x_(i))+rot(0,1)*cos(x_(i));
+                T(0,2) = rot(0,2); T(0,3) = pos.x();
+                T(1,0) = rot(1,0)*cos(x_(i))+rot(1,1)*sin(x_(i));
+                T(1,1) = -rot(1,0)*sin(x_(i))+rot(1,1)*cos(x_(i));
+                T(1,2) = rot(1,2); T(1,3) = pos.y();
+                T(2,0) = rot(2,0)*cos(x_(i))+rot(2,1)*sin(x_(i));
+                T(2,1) = -rot(2,0)*sin(x_(i))+rot(2,1)*cos(x_(i));
+                T(2,2) = rot(2,2); T(2,3) = pos.z();
+                T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
+            }
+
+            T_BVH p;
+            p.link = robot_.kinematic_chain.getSegment(i).getName();
+            p.T = T;
+            transform_vec_bvh_.push_back(p);
+        }
+
+        // Get Endeffector FK
+        for(int i=0; i< transform_vec_bvh_.size(); i++)
+        {
+            if(base_active_)
+            {
+                if(i==0)
+                {
+                    ROS_WARN("BASE IS ACTIVE");
+                    fk_ = mtimes(fk_base_,transform_vec_bvh_.at(i).T);
+                }
+                else
+                {
+                    fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
+                }
+            }
+            else
+            {
+                if(i==0)
+                {
+                    fk_ = transform_vec_bvh_.at(i).T;
+                }
+                else
+                {
+                    fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
+                }
+            }
+            fk_vector_.push_back(fk_); // stacks up multiplied transformation until link n
+        }
 }
 
 void CobNonlinearMPC::FrameTrackerCallback(const geometry_msgs::Pose::ConstPtr& msg)
