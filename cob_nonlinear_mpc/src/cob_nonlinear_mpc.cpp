@@ -157,12 +157,16 @@ bool CobNonlinearMPC::initialize()
     }
     int offset;
 
-    for(int i=0;i<joint_frames.size();i++){
+    for(int i=0;i<robot_.kinematic_chain.getNrOfSegments();i++){
 
-        rot=joint_frames.at(i).getFrameToTip().M;
-        pos=joint_frames.at(i).getFrameToTip().p;
+        KDL::Vector pos;
+        KDL::Rotation rot;
+        rot=robot_.kinematic_chain.getSegment(i).getFrameToTip().M;
+        pos=robot_.kinematic_chain.getSegment(i).getFrameToTip().p;
+#ifdef __DEBUG__
         ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
         ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
+#endif
         if(base_active_){
             T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
             T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
@@ -189,7 +193,7 @@ bool CobNonlinearMPC::initialize()
         }
 
         T_BVH p;
-        p.link = joint_frames.at(i).getName();
+        p.link = robot_.kinematic_chain.getSegment(i).getName();
         p.T = T;
 
         transform_vec_bvh_.push_back(p);
@@ -378,19 +382,19 @@ bool CobNonlinearMPC::process_KDL_tree(){
 #endif
 
         std::vector<KDL::Segment> joint_frames;
-        for (uint16_t i = 0; i < chain_.getNrOfSegments(); i++)
+        for (uint16_t i = 0; i < robot_.kinematic_chain.getNrOfSegments(); i++)
         {
             if(robot_.joints.at(i).getType()==8)//fixed joint
             {
                 if(i==0)//First joint
                 {
-                    KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),chain_.getSegment(i).getFrameToTip(),KDL::RigidBodyInertia::Zero());
+                    KDL::Segment link(robot_.kinematic_chain.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),robot_.kinematic_chain.getSegment(i).getFrameToTip(),KDL::RigidBodyInertia::Zero());
                     robot_.forward_kinematics.push_back(link);
                 }
                 else
                 {
-                    KDL::Frame f = robot_.forward_kinematics.at(i-1).getFrameToTip()*chain_.getSegment(i).getFrameToTip();
-                    KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
+                    KDL::Frame f = robot_.forward_kinematics.at(i-1).getFrameToTip()*robot_.kinematic_chain.getSegment(i).getFrameToTip();
+                    KDL::Segment link(robot_.kinematic_chain.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
                     robot_.forward_kinematics.push_back(link);
                 }
 
@@ -399,7 +403,7 @@ bool CobNonlinearMPC::process_KDL_tree(){
                 KDL::Rotation rot;
                 rot=robot_.forward_kinematics.at(i).getFrameToTip().M;
                 ROS_INFO("Fixed joint");
-                ROS_INFO_STREAM("Chain segment "<< chain_.getSegment(i).getName());
+                ROS_INFO_STREAM("Chain segment "<< robot_.kinematic_chain.getSegment(i).getName());
                 ROS_INFO_STREAM("Joint position "<< " X: " << robot_.forward_kinematics.at(i).getFrameToTip().p.x()<< " Y: " << robot_.forward_kinematics.at(i).getFrameToTip().p.y()<< " Z: " << robot_.forward_kinematics.at(i).getFrameToTip().p.z());
                 ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
                 ROS_INFO_STREAM("Joint position of transformation"<< " X: " << robot_.forward_kinematics.at(i).getFrameToTip().p.x()<< " Y: " << robot_.forward_kinematics.at(i).getFrameToTip().p.y()<< " Z: " << robot_.forward_kinematics.at(i).getFrameToTip().p.z());
@@ -410,26 +414,24 @@ bool CobNonlinearMPC::process_KDL_tree(){
 
                 KDL::Frame f = robot_.forward_kinematics.at(i-1).getFrameToTip()*chain_.getSegment(i).getFrameToTip();
                 KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
-
                 robot_.forward_kinematics.push_back(link);
-                pos=robot_.forward_kinematics.at(i).getFrameToTip().p;
-                if(joint_frames.size()==0)
+                if(i==0)//First joint
                 {
-    //                ROS_INFO("FIRST JOINT");
-                    joint_frames.push_back(robot_.forward_kinematics.at(i));
-                    rot=robot_.forward_kinematics.at(i).getFrameToTip().M;
-                    pos=robot_.forward_kinematics.at(i).getFrameToTip().p;
+                    KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),chain_.getSegment(i).getFrameToTip(),KDL::RigidBodyInertia::Zero());
+                    robot_.forward_kinematics.push_back(link);
                 }
                 else
                 {
-                    KDL::Frame f = chain_.getSegment(i).getFrameToTip();
-                    KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
+                    KDL::Frame f = robot_.forward_kinematics.at(i-1).getFrameToTip()*robot_.kinematic_chain.getSegment(i).getFrameToTip();
+                    KDL::Segment link(robot_.kinematic_chain.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
+                    robot_.forward_kinematics.push_back(link);
+                    // joint_frames its the same as chain_.getSegment(i).getFrameToTip() which is not in the robot variable
+                    // in this case robot_.kinematic_chain.getSegment(i).getFrameToTip()
 
-                    joint_frames.push_back(link);
-                    rot=chain_.getSegment(i).getFrameToTip().M;
-                    pos=chain_.getSegment(i).getFrameToTip().p;
                 }
 #ifdef __DEBUG__
+                rot=robot_.kinematic_chain.getSegment(i).getFrameToTip().M;
+                pos=robot_.kinematic_chain.getSegment(i).getFrameToTip().p;
                 ROS_INFO("Rotational joint");
                 ROS_INFO_STREAM("Joint name "<< chain_.getSegment(i).getJoint().getName());
                 ROS_INFO_STREAM("Joint position "<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
