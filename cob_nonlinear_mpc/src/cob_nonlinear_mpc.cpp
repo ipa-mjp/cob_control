@@ -168,6 +168,12 @@ bool CobNonlinearMPC::initialize()
         x_open_loop_.push_back(tmp);
     }
 
+    for(int i = 0; i < control_dim_; i++)
+    {
+        ROS_INFO_STREAM("CONTROL DIM: "<<control_dim_);
+        u_init_.push_back(0);
+    }
+
     joint_state_ = KDL::JntArray(robot_.kinematic_chain.getNrOfJoints());
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
 
@@ -286,6 +292,8 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     double min_dist = 0.15;
 
     // Bounds and initial guess for the control
+    ROS_INFO_STREAM("input_constraints_min_: " <<input_constraints_min_.size());
+    ROS_INFO_STREAM("input_constraints_max_: " <<input_constraints_max_.size());
     vector<double> u_min =  input_constraints_min_;
     vector<double> u_max  = input_constraints_max_;
 
@@ -293,14 +301,13 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     vector<double> x0_min;
     vector<double> x0_max;
     vector<double> x_init;
+    ROS_INFO_STREAM("state rows: " <<state.rows());
     for(unsigned int i=0; i < state.rows();i++)
     {
         x0_min.push_back(state(i));
         x0_max.push_back(state(i));
         x_init.push_back(state(i));
     }
-
-    x_open_loop_.at(0) = x_init;
 
     vector<double> x_min  = state_path_constraints_min_;
     vector<double> x_max  = state_path_constraints_max_;
@@ -419,9 +426,6 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         // Local state
         X.push_back( V.nz(Slice(offset,offset+state_dim_)));
 
-        vector<double> x_ol;
-        x_ol = x_open_loop_.at(k);
-
         if(k==0)
         {
             v_min.insert(v_min.end(), x0_min.begin(), x0_min.end());
@@ -432,7 +436,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
             v_min.insert(v_min.end(), x_min.begin(), x_min.end());
             v_max.insert(v_max.end(), x_max.begin(), x_max.end());
         }
-        v_init.insert(v_init.end(), x_ol.begin(), x_ol.end());
+        v_init.insert(v_init.end(), x_init.begin(), x_init.end());
         offset += state_dim_;
 
         // Local control via shift initialization
@@ -440,20 +444,15 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         v_min.insert(v_min.end(), u_min.begin(), u_min.end());
         v_max.insert(v_max.end(), u_max.begin(), u_max.end());
 
-        vector<double> u_ol;
-        u_ol = u_open_loop_.at(k);
-
-        v_init.insert(v_init.end(), u_ol.begin(), u_ol.end());
+        v_init.insert(v_init.end(), u_init_.begin(), u_init_.end());
         offset += control_dim_;
     }
 
-    vector<double> x_ol;
-    x_ol = x_open_loop_.at(num_shooting_nodes_-1);
     // State at end
     X.push_back(V.nz(Slice(offset,offset+state_dim_)));
     v_min.insert(v_min.end(), xf_min.begin(), xf_min.end());
     v_max.insert(v_max.end(), xf_max.begin(), xf_max.end());
-    v_init.insert(v_init.end(), x_ol.begin(), x_ol.end());
+    v_init.insert(v_init.end(), u_init_.begin(), u_init_.end());
     offset += state_dim_;
 
     // Make sure that the size of the variable vector is consistent with the number of variables that we have referenced

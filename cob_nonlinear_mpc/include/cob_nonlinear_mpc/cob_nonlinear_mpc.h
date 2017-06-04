@@ -157,6 +157,7 @@ private:
     vector<vector<double>> x_open_loop_;
 
     bool base_active_;
+    vector<double> u_init_;
 
 
 public:
