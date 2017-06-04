@@ -255,3 +255,7 @@ void CobNonlinearMPC::generate_symbolic_forward_kinematics(){
             fk_vector_.push_back(fk_); // stacks up multiplied transformation until link n
         }
 }
+
+void CobNonlinearMPC::generate_bounding_volumes(){
+
+}

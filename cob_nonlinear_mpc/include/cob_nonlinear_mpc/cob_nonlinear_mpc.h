@@ -190,6 +190,8 @@ public:
     bool process_KDL_tree();
 
     void generate_symbolic_forward_kinematics();
+
+    void generate_bounding_volumes();
 };
 
 
