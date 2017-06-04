@@ -52,6 +52,12 @@
 using namespace casadi;
 using namespace std;
 
+struct Robot
+{
+    int dof;
+    urdf::Model urdf;
+    KDL::Chain kinematic_chain;
+};
 
 struct DH
 {
@@ -84,7 +90,8 @@ private:
     std::string chain_tip_link_;
 
     int dof;
-
+    urdf::Model model;
+    Robot robot_;
     KDL::Chain chain_;
 
     DH dh_param;
@@ -141,6 +148,7 @@ private:
 
     KDL::JntArray joint_state_;
     KDL::JntArray odometry_state_;
+    KDL::Tree robot_tree_;
     vector<vector<double>> u_open_loop_;
     vector<vector<double>> x_open_loop_;
 
@@ -174,6 +182,8 @@ public:
 
     SX quaternion_product(SX q1, SX q2);
     SX dual_quaternion_product(SX q1, SX q2);
+
+    bool process_KDL_tree();
 };
 
 

@@ -142,118 +142,6 @@ bool CobNonlinearMPC::initialize()
         return false;
     }
 
-    /// parse robot_description and generate KDL chains
-    KDL::Tree my_tree;
-    if (!kdl_parser::treeFromParam("/robot_description", my_tree))
-    {
-        ROS_ERROR("Failed to construct kdl tree");
-        return false;
-    }
-
-    my_tree.getChain(chain_base_link_, chain_tip_link_, chain_);
-    if (chain_.getNrOfJoints() == 0)
-    {
-        ROS_ERROR("Failed to initialize kinematic chain");
-        return false;
-    }
-    ROS_INFO_STREAM("Number of joints:" << chain_.getNrOfJoints());
-    ROS_INFO_STREAM("Number of segments:" << chain_.getNrOfSegments());
-    dof = joint_names.size();
-
-    /// parse robot_description and set velocity limits
-    urdf::Model model;
-    if (!model.initParam("/robot_description"))
-    {
-        ROS_ERROR("Failed to parse urdf file for JointLimits");
-        return false;
-    }
-    ROS_WARN("Robot Description loaded...");
-    std::vector<double> joint_params_;
-    urdf::Vector3 position;
-
-    std::vector<KDL::Joint> joints;
-    KDL::Frame F;
-    double roll,pitch,yaw;
-    for (uint16_t i = 0; i < chain_.getNrOfSegments(); i++)
-    {
-        joints.push_back(chain_.getSegment(i).getJoint());
-        ROS_INFO_STREAM("Chain segment "<< chain_.getSegment(i).getName());
-        F=chain_.getSegment(i).getFrameToTip();
-        F.M.GetRPY(roll,pitch,yaw);
-        ROS_INFO_STREAM("Chain frame "<< " X: " << F.p.x()<< " Y: " << F.p.y()<< " Z: "<<F.p.z());
-        ROS_INFO_STREAM("Chain frame "<< " ROLL: " << roll<< " PITCH: " << pitch<< " YAW: "<<yaw);
-
-
-    }
-
-    // JointNames
-    std::vector<KDL::Vector> joint_origins;
-    for (uint16_t i = 0; i < joints.size(); i++)
-    {
-        joint_origins.push_back(joints[i].JointOrigin());
-        ROS_INFO_STREAM("Joint name "<< joints[i].getName()<< " type: " <<joints[i].getType() << " origin: " << joint_origins[i].x());
-        ROS_INFO_STREAM("Joint origin "<< " X: " << joint_origins[i].x()<< " Y: " << joint_origins[i].y()<< " Z: " << joint_origins[i].z());
-
-    }
-
-    KDL::Vector pos;
-    KDL::Rotation rot;
-    std::vector<KDL::Segment> joint_frames;
-    std::vector<KDL::Segment> F_previous;
-    for (uint16_t i = 0; i < chain_.getNrOfSegments(); i++)
-    {
-        if(joints[i].getType()==8)
-        {
-            ROS_INFO("Fixed joint");
-            ROS_INFO_STREAM("Chain segment "<< chain_.getSegment(i).getName());
-			if(i==0)
-            {
-			    KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),chain_.getSegment(i).getFrameToTip(),KDL::RigidBodyInertia::Zero());
-                F_previous.push_back(link);
-            }
-            else
-            {
-                KDL::Frame f = F_previous.at(i-1).getFrameToTip()*chain_.getSegment(i).getFrameToTip();
-                KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
-                F_previous.push_back(link);
-            }
-
-            ROS_INFO_STREAM("Joint position "<< " X: " << F_previous.at(i).getFrameToTip().p.x()<< " Y: " << F_previous.at(i).getFrameToTip().p.y()<< " Z: " << F_previous.at(i).getFrameToTip().p.z());
-            rot=F_previous.at(i).getFrameToTip().M;
-            ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
-            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << F_previous.at(i).getFrameToTip().p.x()<< " Y: " << F_previous.at(i).getFrameToTip().p.y()<< " Z: " << F_previous.at(i).getFrameToTip().p.z());
-        }
-		if(joints[i].getType()==0)
-        {
-            ROS_INFO("Rotational joint");
-            ROS_INFO_STREAM("Joint name "<< chain_.getSegment(i).getJoint().getName());
-            KDL::Frame f = F_previous.at(i-1).getFrameToTip()*chain_.getSegment(i).getFrameToTip();
-            KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
-
-            F_previous.push_back(link);
-            pos=F_previous.at(i).getFrameToTip().p;
-            if(joint_frames.size()==0)
-            {
-//                ROS_INFO("FIRST JOINT");
-                joint_frames.push_back(F_previous.at(i));
-                rot=F_previous.at(i).getFrameToTip().M;
-                pos=F_previous.at(i).getFrameToTip().p;
-            }
-            else
-            {
-                KDL::Frame f = chain_.getSegment(i).getFrameToTip();
-                KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
-
-                joint_frames.push_back(link);
-                rot=chain_.getSegment(i).getFrameToTip().M;
-                pos=chain_.getSegment(i).getFrameToTip().p;
-            }
-            ROS_INFO_STREAM("Joint position "<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
-            ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
-            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());            //F_previous.p= pos;
-        }
-    }
-
     SX T = SX::sym("T",4,4);
 	if(base_active_){
         //Base config
@@ -424,6 +312,125 @@ bool CobNonlinearMPC::initialize()
 
     ROS_WARN_STREAM(nh_.getNamespace() << "/NMPC...initialized!");
     return true;
+}
+
+bool CobNonlinearMPC::process_KDL_tree(){
+
+    /// parse robot_description and generate KDL chains
+
+    if (!kdl_parser::treeFromParam("/robot_description", robot_tree_))
+    {
+        ROS_ERROR("Failed to construct kdl tree");
+        return false;
+    }
+
+    robot_tree_.getChain(chain_base_link_, chain_tip_link_, robot_.kinematic_chain);
+    if (chain_.getNrOfJoints() == 0)
+    {
+        ROS_ERROR("Failed to initialize kinematic chain");
+        return false;
+    }
+
+    #ifdef __DEBUG__
+        ROS_INFO_STREAM("Number of joints:" << robot_.kinematic_chain.getNrOfJoints());
+        ROS_INFO_STREAM("Number of segments:" << robot_.kinematic_chain.getNrOfSegments());
+    #endif
+
+    robot_.dof = joint_names.size();
+
+    // parse robot_description and set velocity limits
+
+    if (!robot_.urdf.initParam("/robot_description"))
+    {
+        ROS_ERROR("Failed to parse urdf file for JointLimits");
+        return false;
+    }
+
+    ROS_INFO("Robot Description loaded...");
+    std::vector<double> joint_params_;
+    urdf::Vector3 position;
+
+    std::vector<KDL::Joint> joints;
+    KDL::Frame F;
+    double roll,pitch,yaw;
+    for (uint16_t i = 0; i < chain_.getNrOfSegments(); i++)
+    {
+        joints.push_back(chain_.getSegment(i).getJoint());
+        ROS_INFO_STREAM("Chain segment "<< chain_.getSegment(i).getName());
+        F=chain_.getSegment(i).getFrameToTip();
+        F.M.GetRPY(roll,pitch,yaw);
+        ROS_INFO_STREAM("Chain frame "<< " X: " << F.p.x()<< " Y: " << F.p.y()<< " Z: "<<F.p.z());
+        ROS_INFO_STREAM("Chain frame "<< " ROLL: " << roll<< " PITCH: " << pitch<< " YAW: "<<yaw);
+    }
+
+        // JointNames
+        std::vector<KDL::Vector> joint_origins;
+        for (uint16_t i = 0; i < joints.size(); i++)
+        {
+            joint_origins.push_back(joints[i].JointOrigin());
+            ROS_INFO_STREAM("Joint name "<< joints[i].getName()<< " type: " <<joints[i].getType() << " origin: " << joint_origins[i].x());
+            ROS_INFO_STREAM("Joint origin "<< " X: " << joint_origins[i].x()<< " Y: " << joint_origins[i].y()<< " Z: " << joint_origins[i].z());
+
+        }
+
+        KDL::Vector pos;
+        KDL::Rotation rot;
+        std::vector<KDL::Segment> joint_frames;
+        std::vector<KDL::Segment> F_previous;
+        for (uint16_t i = 0; i < chain_.getNrOfSegments(); i++)
+        {
+            if(joints[i].getType()==8)
+            {
+                ROS_INFO("Fixed joint");
+                ROS_INFO_STREAM("Chain segment "<< chain_.getSegment(i).getName());
+                if(i==0)
+                {
+                    KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),chain_.getSegment(i).getFrameToTip(),KDL::RigidBodyInertia::Zero());
+                    F_previous.push_back(link);
+                }
+                else
+                {
+                    KDL::Frame f = F_previous.at(i-1).getFrameToTip()*chain_.getSegment(i).getFrameToTip();
+                    KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
+                    F_previous.push_back(link);
+                }
+
+                ROS_INFO_STREAM("Joint position "<< " X: " << F_previous.at(i).getFrameToTip().p.x()<< " Y: " << F_previous.at(i).getFrameToTip().p.y()<< " Z: " << F_previous.at(i).getFrameToTip().p.z());
+                rot=F_previous.at(i).getFrameToTip().M;
+                ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
+                ROS_INFO_STREAM("Joint position of transformation"<< " X: " << F_previous.at(i).getFrameToTip().p.x()<< " Y: " << F_previous.at(i).getFrameToTip().p.y()<< " Z: " << F_previous.at(i).getFrameToTip().p.z());
+            }
+            if(joints[i].getType()==0)
+            {
+                ROS_INFO("Rotational joint");
+                ROS_INFO_STREAM("Joint name "<< chain_.getSegment(i).getJoint().getName());
+                KDL::Frame f = F_previous.at(i-1).getFrameToTip()*chain_.getSegment(i).getFrameToTip();
+                KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
+
+                F_previous.push_back(link);
+                pos=F_previous.at(i).getFrameToTip().p;
+                if(joint_frames.size()==0)
+                {
+    //                ROS_INFO("FIRST JOINT");
+                    joint_frames.push_back(F_previous.at(i));
+                    rot=F_previous.at(i).getFrameToTip().M;
+                    pos=F_previous.at(i).getFrameToTip().p;
+                }
+                else
+                {
+                    KDL::Frame f = chain_.getSegment(i).getFrameToTip();
+                    KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
+
+                    joint_frames.push_back(link);
+                    rot=chain_.getSegment(i).getFrameToTip().M;
+                    pos=chain_.getSegment(i).getFrameToTip().p;
+                }
+                ROS_INFO_STREAM("Joint position "<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
+                ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
+                ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());            //F_previous.p= pos;
+            }
+        }
+
 }
 
 void CobNonlinearMPC::FrameTrackerCallback(const geometry_msgs::Pose::ConstPtr& msg)
