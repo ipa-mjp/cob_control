@@ -67,10 +67,9 @@ struct T_BVH
 {
     SX T;
     SX BVH_p;
-
+    string link;
     bool constraint = false;
 };
-
 
 class CobNonlinearMPC
 {
@@ -79,6 +78,7 @@ private:
     std::vector<std::string> transformation_names_;
     std::vector<std::string> transformation_names_base_;
     std::vector<std::string> joint_names;
+
 
     std::string chain_base_link_;
     std::string chain_tip_link_;
@@ -97,10 +97,20 @@ private:
 
     std::vector<T_BVH> transform_vec_bvh_;
     std::vector<SX> transform_base_vec_;
+
+//    std::vector<vector<SX>> bvh_matrix;
+    std::map<string,vector<vector<SX>>> bvh_matrix;
     int state_dim_;
     int control_dim_;
     int num_shooting_nodes_;
     double time_horizon_;
+
+    XmlRpc::XmlRpcValue scm_;
+    XmlRpc::XmlRpcValue bvb_;
+
+    std::unordered_map<std::string, std::vector<std::string> > self_collision_map_;
+    vector<double> bvb_positions_;
+    vector<double> bvb_radius_;
 
     visualization_msgs::MarkerArray marker_array_;
 
@@ -109,7 +119,7 @@ private:
     SX x_;
     SX fk_;
     SX fk_link4_;
-
+    std::vector<SX> fk_vector_;
     SX fk_base_;
 
     SX fk_dual_quat_;
@@ -131,7 +141,8 @@ private:
 
     KDL::JntArray joint_state_;
     KDL::JntArray odometry_state_;
-    vector<double> u_init_;
+    vector<vector<double>> u_open_loop_;
+    vector<vector<double>> x_open_loop_;
 
     bool base_active_;
 

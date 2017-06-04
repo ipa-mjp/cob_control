@@ -198,42 +198,56 @@ bool CobNonlinearMPC::initialize()
 
     KDL::Vector pos;
     KDL::Rotation rot;
-    std::vector<KDL::Frame> joint_frames;
-    std::vector<KDL::Frame> F_previous;
+    std::vector<KDL::Segment> joint_frames;
+    std::vector<KDL::Segment> F_previous;
     for (uint16_t i = 0; i < chain_.getNrOfSegments(); i++)
     {
         if(joints[i].getType()==8)
         {
             ROS_INFO("Fixed joint");
             ROS_INFO_STREAM("Chain segment "<< chain_.getSegment(i).getName());
-            if(i==0)
-                F_previous.push_back(chain_.getSegment(i).getFrameToTip());
+			if(i==0)
+            {
+			    KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),chain_.getSegment(i).getFrameToTip(),KDL::RigidBodyInertia::Zero());
+                F_previous.push_back(link);
+            }
             else
-                F_previous.push_back(F_previous.at(i-1)*chain_.getSegment(i).getFrameToTip());
+            {
+                KDL::Frame f = F_previous.at(i-1).getFrameToTip()*chain_.getSegment(i).getFrameToTip();
+                KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
+                F_previous.push_back(link);
+            }
 
-            ROS_INFO_STREAM("Joint position "<< " X: " << F_previous.at(i).p.x()<< " Y: " << F_previous.at(i).p.y()<< " Z: " << F_previous.at(i).p.z());
-            rot=F_previous.at(i).M;
+            ROS_INFO_STREAM("Joint position "<< " X: " << F_previous.at(i).getFrameToTip().p.x()<< " Y: " << F_previous.at(i).getFrameToTip().p.y()<< " Z: " << F_previous.at(i).getFrameToTip().p.z());
+            rot=F_previous.at(i).getFrameToTip().M;
             ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
-            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << F_previous.at(i).p.x()<< " Y: " << F_previous.at(i).p.y()<< " Z: " << F_previous.at(i).p.z());
+            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << F_previous.at(i).getFrameToTip().p.x()<< " Y: " << F_previous.at(i).getFrameToTip().p.y()<< " Z: " << F_previous.at(i).getFrameToTip().p.z());
         }
-        if(joints[i].getType()==0){
+		if(joints[i].getType()==0)
+        {
             ROS_INFO("Rotational joint");
             ROS_INFO_STREAM("Joint name "<< chain_.getSegment(i).getJoint().getName());
+            KDL::Frame f = F_previous.at(i-1).getFrameToTip()*chain_.getSegment(i).getFrameToTip();
+            KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
 
-            if(joint_frames.size()==0){
-                ROS_INFO("FIRST JOINT");
-                F_previous.push_back(chain_.getSegment(i).getFrameToTip());
+            F_previous.push_back(link);
+            pos=F_previous.at(i).getFrameToTip().p;
+            if(joint_frames.size()==0)
+            {
+//                ROS_INFO("FIRST JOINT");
                 joint_frames.push_back(F_previous.at(i));
-                rot=F_previous.at(i).M;
-                pos=F_previous.at(i).p;
+                rot=F_previous.at(i).getFrameToTip().M;
+                pos=F_previous.at(i).getFrameToTip().p;
             }
-            else{
-                F_previous.push_back(F_previous.at(i-1)*chain_.getSegment(i).getFrameToTip());
-                joint_frames.push_back(chain_.getSegment(i).getFrameToTip());
+            else
+            {
+                KDL::Frame f = chain_.getSegment(i).getFrameToTip();
+                KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
+
+                joint_frames.push_back(link);
                 rot=chain_.getSegment(i).getFrameToTip().M;
                 pos=chain_.getSegment(i).getFrameToTip().p;
             }
-            pos=F_previous.at(i).p;
             ROS_INFO_STREAM("Joint position "<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
             ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
             ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());            //F_previous.p= pos;
@@ -241,7 +255,7 @@ bool CobNonlinearMPC::initialize()
     }
 
     SX T = SX::sym("T",4,4);
-    if(base_active_){
+	if(base_active_){
         //Base config
         T(0,0) = cos(x_(2)); T(0,1) = -sin(x_(2));  T(0,2) = 0.0; T(0,3) = x_(0);
         T(1,0) = sin(x_(2)); T(1,1) = cos(x_(2));   T(1,2) = 0.0; T(1,3) = x_(1);
@@ -253,12 +267,11 @@ bool CobNonlinearMPC::initialize()
     }
     int offset;
 
-
     for(int i=0;i<joint_frames.size();i++){
 
-        rot=joint_frames.at(i).M;
-        pos=joint_frames.at(i).p;
-        ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",joint_frames.at(i)(0,0),joint_frames.at(i)(0,1),joint_frames.at(i)(0,2),joint_frames.at(i)(1,0),joint_frames.at(i)(1,1),joint_frames.at(i)(1,2),joint_frames.at(i)(2,0),joint_frames.at(i)(2,1),joint_frames.at(i)(2,2));
+        rot=joint_frames.at(i).getFrameToTip().M;
+        pos=joint_frames.at(i).getFrameToTip().p;
+        ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
         ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
         if(base_active_){
             T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
@@ -286,11 +299,11 @@ bool CobNonlinearMPC::initialize()
         }
 
         T_BVH p;
+        p.link = joint_frames.at(i).getName();
         p.T = T;
 
         transform_vec_bvh_.push_back(p);
     }
-
 
     // Get Endeffector FK
     for(int i=0; i< transform_vec_bvh_.size(); i++)
@@ -317,24 +330,84 @@ bool CobNonlinearMPC::initialize()
                 fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
             }
         }
+        fk_vector_.push_back(fk_); // stacks up multiplied transformation until link n
     }
 
-    for(int i=0; i< 5; i++)
+    // Get bounding volume forward kinematics
+    for(int i=0; i<transform_vec_bvh_.size(); i++)
     {
-        if(i==0)
+        T_BVH bvh = transform_vec_bvh_.at(i);
+        std::vector<SX> bvh_arm;
+        if(i-1<0)
         {
-            fk_link4_ = transform_vec_bvh_.at(i).T;
+            SX transform = mtimes(fk_vector_.at(i),bvh.T);
+            SX tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
+            bvh_arm.push_back(tmp);
+            bvh_matrix[bvh.link].push_back(bvh_arm);
+
+            if(bvh.constraint)
+            {
+                bvh_arm.clear();
+                tmp.clear();
+                transform = mtimes(fk_vector_.at(i),bvh.BVH_p);
+                tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
+                bvh_arm.push_back(tmp);
+                bvh_matrix[bvh.link].push_back(bvh_arm);
+            }
         }
         else
         {
-            fk_link4_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
+            bvh_arm.clear();
+            SX transform = mtimes(fk_vector_.at(i-1),bvh.T);
+            SX tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
+            bvh_arm.push_back(tmp);
+            bvh_matrix[bvh.link].push_back(bvh_arm);
+            bvh_arm.clear();
+
+            if(bvh.constraint)
+            {
+                tmp.clear();
+                transform = mtimes(fk_vector_.at(i-1),bvh.BVH_p);
+                tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
+                bvh_arm.push_back(tmp);
+                bvh_matrix[bvh.link].push_back(bvh_arm);
+            }
         }
     }
-
-    for(int i = 0; i < control_dim_; i++)
+    if(base_active_)
     {
-        ROS_INFO_STREAM("CONTROL DIM: "<<control_dim_);
-        u_init_.push_back(0);
+        for(int i=0; i<bvb_positions_.size(); i++)
+        {
+            std::vector<SX> base_bvh;
+            SX tmp = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+bvb_positions_.at(i)});
+            base_bvh.push_back(tmp);
+            bvh_matrix["body"].push_back(base_bvh);
+        }
+
+    }
+
+
+    vector<double> tmp;
+    for(int k=0; k < num_shooting_nodes_; ++k)
+    {
+        tmp.clear();
+        for(int i=0; i < control_dim_; ++i)
+        {
+            tmp.push_back(0);
+        }
+        u_open_loop_.push_back(tmp);
+    }
+
+    for(int k=1; k <= num_shooting_nodes_; ++k)
+    {
+        tmp.clear();
+
+        for(int i=0; i < state_dim_; ++i)
+        {
+            tmp.push_back(0);
+        }
+
+        x_open_loop_.push_back(tmp);
     }
 
     joint_state_ = KDL::JntArray(chain_.getNrOfJoints());
@@ -430,6 +503,7 @@ void CobNonlinearMPC::odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
 KDL::JntArray CobNonlinearMPC::getJointState()
 {
     KDL:: JntArray tmp(joint_state_.rows() + odometry_state_.rows());
+//    KDL:: JntArray tmp(joint_state_.rows());
 
     ROS_INFO("STATE SIZE: %i Odometry State SIze %i", tmp.rows(), odometry_state_.rows());
 
@@ -467,6 +541,9 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         x0_max.push_back(state(i));
         x_init.push_back(state(i));
     }
+
+    x_open_loop_.at(0) = x_init;
+
     vector<double> x_min  = state_path_constraints_min_;
     vector<double> x_max  = state_path_constraints_max_;
     vector<double> xf_min = state_terminal_constraints_min_;
@@ -493,57 +570,77 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX q_d = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
 
     // Prevent collision with Base_link
-//    SX barrier;
-//
-//    SX dist = dot(p_c,p_c);
-//    barrier = exp((min_dist - sqrt(dist))/0.01);
-//
-//    SX BVH_barrier;
-//
-//    for(int i = 0; i < bvh_points_.size(); i++)
-//    {
-//        dist = dot(bvh_points_.at(i) - p_c,bvh_points_.at(i) - p_c);
-//        barrier += exp((min_dist - sqrt(dist))/0.01);
-//    }
+ SX barrier;
+    SX dist;
 
+    std::unordered_map<std::string, std::vector<std::string> >::iterator it_scm;
+
+    int counter = 0;
+    double bv_radius;
+
+    for( it_scm = self_collision_map_.begin(); it_scm != self_collision_map_.end(); it_scm++)
+    {
+        std::vector<string> scm_collision_links = it_scm->second;
+        for(int i=0; i<scm_collision_links.size(); i++)
+        {
+            ROS_WARN_STREAM(it_scm->first);
+            vector<vector<SX>> p1_mat = bvh_matrix[it_scm->first];
+            vector<vector<SX>> p2_mat = bvh_matrix[scm_collision_links.at(i)];
+
+            for(int k=0; k<p1_mat.size(); k++)
+            {
+                if(it_scm->first == "body")
+                {
+                    bv_radius = bvb_radius_.at(k);
+                }
+                else
+                {
+                    bv_radius = 0.1;
+                }
+
+                vector<SX> p1_vec = p1_mat.at(k);
+                for(int m=0; m<p2_mat.size(); m++)
+                {
+                    vector<SX> p2_vec = p2_mat.at(m);
+
+                    SX p1 = SX::vertcat({p1_vec.at(0)});
+                    SX p2 = SX::vertcat({p2_vec.at(0)});
+                    dist = dot(p1 - p2, p1 - p2);
+
+                    if(counter == 0)
+                    {
+                        barrier = exp((bv_radius - sqrt(dist))/0.01);
+                        counter = 1;
+                    }
+                    else
+                    {
+                        barrier += exp((bv_radius - sqrt(dist))/0.01);
+                    }
+                }
+            }
+        }
+    }
+
+    // Get orientation error
     SX q_c_inverse = SX::vertcat({q_c(0), -q_c(1), -q_c(2), -q_c(3)});
-//    q_c_inverse = q_c_inverse / sqrt(dot(q_c_inverse,q_c_inverse));
-
     SX e_quat= quaternion_product(q_c_inverse,q_d);
-
-//    q_c_inverse = q_c_inverse / sqrt(dot(q_c_inverse,q_c_inverse));
-
     SX error_attitute = SX::vertcat({ e_quat(1), e_quat(2), e_quat(3)});
 
-    SX R = 0.005*SX::vertcat({1, 1, 1, 1, 1, 1, 1}); // needs to be changed to be generic wieghting
+    // L2 norm of the control signal
+    SX R = 1*SX::vertcat({100, 100, 100, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
 
-    SX L = 10 * dot(p_c-x_d,p_c-x_d) + 10 * dot(q_c - q_d, q_c - q_d) + energy ;//+ barrier;
-//    SX L = 10*dot(p_c-x_d,p_c-x_d) + 10 * dot(error_attitute,error_attitute) + energy;// + barrier;
+    // L2 norm of the states
+    SX S = 0.1*SX::vertcat({0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
+    SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
 
-    ROS_INFO("Create Euler integrator function");
+    // Objective
+    SX L = 10*dot(p_c-x_d,p_c-x_d) + energy + 10 * dot(error_attitute,error_attitute) + barrier;
+
+    // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
 
-//    // Generate C-code
-//    F.generate("nmpc");
-//
-//    Importer("nmpc.c","clang");
-//
-//    // Compile the C-code to a shared library
-//    string compile_command = "gcc -fPIC -shared -O3 nmpc.c -o nmpc.so";
-//    int flag = system(compile_command.c_str());
-//    casadi_assert_message(flag==0, "Compilation failed");
-//
-////
-//    // Use CasADi's "external" to load the compiled function
-//    F = external("nmpc");
-//
-//    F = external("F", "./nmpc.so");
-
-    ROS_INFO("Total number of NLP variables");
-    ROS_INFO("state_dim_: %i", state_dim_);
-    ROS_INFO("num_shooting_nodes_: % i", num_shooting_nodes_);
-    ROS_INFO("control_dim_: %i", control_dim_);
+    // Total number of NLP variables
     int NV = state_dim_*(num_shooting_nodes_+1) + control_dim_*num_shooting_nodes_;
 
     // Declare variable vector for the NLP
@@ -557,47 +654,52 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     // State at each shooting node and control for each shooting interval
     vector<MX> X, U;
+
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
         // Local state
         X.push_back( V.nz(Slice(offset,offset+state_dim_)));
 
+        vector<double> x_ol;
+        x_ol = x_open_loop_.at(k);
+
         if(k==0)
         {
-            ROS_INFO_STREAM("INITIAL CONDITION: "<<x0_min<< "SIZE: " << x0_min.size());
             v_min.insert(v_min.end(), x0_min.begin(), x0_min.end());
             v_max.insert(v_max.end(), x0_max.begin(), x0_max.end());
         }
         else
         {
-            ROS_INFO_STREAM("STATE CONDITION: "<<x_min<< "SIZE: " << x_min.size());
             v_min.insert(v_min.end(), x_min.begin(), x_min.end());
             v_max.insert(v_max.end(), x_max.begin(), x_max.end());
         }
-        v_init.insert(v_init.end(), x_init.begin(), x_init.end());
+        v_init.insert(v_init.end(), x_ol.begin(), x_ol.end());
         offset += state_dim_;
 
-        // Local control
+        // Local control via shift initialization
         U.push_back( V.nz(Slice(offset,offset+control_dim_)));
-        ROS_INFO_STREAM("CONTROL CONDITION: "<<u_min<< "SIZE: " << u_min.size());
         v_min.insert(v_min.end(), u_min.begin(), u_min.end());
         v_max.insert(v_max.end(), u_max.begin(), u_max.end());
-        v_init.insert(v_init.end(), u_init_.begin(), u_init_.end());
+
+        vector<double> u_ol;
+        u_ol = u_open_loop_.at(k);
+
+        v_init.insert(v_init.end(), u_ol.begin(), u_ol.end());
         offset += control_dim_;
     }
 
-    ROS_INFO("State at end");
+    vector<double> x_ol;
+    x_ol = x_open_loop_.at(num_shooting_nodes_-1);
+    // State at end
     X.push_back(V.nz(Slice(offset,offset+state_dim_)));
-    ROS_INFO_STREAM("FINAL STATE CONDITION: "<<xf_min << "SIZE: " << xf_min.size());
     v_min.insert(v_min.end(), xf_min.begin(), xf_min.end());
     v_max.insert(v_max.end(), xf_max.begin(), xf_max.end());
-    v_init.insert(v_init.end(), x_init.begin(), x_init.end());
+    v_init.insert(v_init.end(), x_ol.begin(), x_ol.end());
     offset += state_dim_;
-    ROS_INFO("offset:%i",offset);
-    ROS_INFO("NV:%i",NV);
+
     // Make sure that the size of the variable vector is consistent with the number of variables that we have referenced
     casadi_assert(offset==NV);
-    ROS_INFO("NV:%i",NV);
+
     // Objective function
     MX J = 0;
 
@@ -617,20 +719,20 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         J += I_out.at("qf");
     }
 
-    ROS_INFO("Building NLP solver...");
+    // NLP
     MXDict nlp = {{"x", V}, {"f", J}, {"g", vertcat(g)}};
 
     // Set options
     Dict opts;
 
-    opts["ipopt.tol"] = 1e-5;
+    opts["ipopt.tol"] = 1e-4;
     opts["ipopt.max_iter"] = 20;
 //    opts["ipopt.hessian_approximation"] = "limited-memory";
 //    opts["ipopt.hessian_constant"] = "yes";
     opts["ipopt.linear_solver"] = "ma27";
     opts["ipopt.print_level"] = 0;
-    opts["print_time"] = false;
-    opts["expand"] = true;  // Removes overhead, not sure if this command does the same as in the create_integrator function !
+    opts["print_time"] = true;
+    opts["expand"] = true;  // Removes overhead
 
     // Create an NLP solver and buffers
     Function solver = nlpsol("nlpsol", "ipopt", nlp, opts);
@@ -644,9 +746,9 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     arg["ubg"] = 0;
     arg["x0"] = v_init;
 
-    ROS_INFO("Solving...");
+    // Solve the problem
     res = solver(arg);
-    ROS_INFO("Accessing solution...");
+
     // Optimal solution of the NLP
     vector<double> V_opt(res.at("x"));
     vector<double> J_opt(res.at("f"));
@@ -656,10 +758,11 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //    Eigen::VectorXd x_new = Eigen::VectorXd::Zero(state_dim_);
     vector<double> x_new;
     SX sx_x_new;
-    u_init_.clear();
+    u_open_loop_.clear();
+    x_open_loop_.clear();
     x_new.clear();
-    ROS_INFO("Copy only the first optimal control sequence");
-    for(int i=0; i<1; ++i)  //
+
+    for(int i=0; i<1; ++i)  // Copy only the first optimal control sequence
     {
         for(int j=0; j<control_dim_; ++j)
         {
@@ -667,67 +770,61 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
             x_new.push_back(V_opt.at(j));
         }
     }
+    sx_x_new = SX::vertcat({x_new});
 
     sx_x_new = SX::vertcat({x_new});
-    ROS_INFO("Safe optimal control sequence at time t_k and take it as inital guess at t_k+1");
-    for(int i=0; i < control_dim_; ++i)
-    {
-        u_init_.push_back(q_dot(i));
-//        u_init_.push_back(V_opt.at(state_dim_ + control_dim_ + i));
-    }
+    // Safe optimal control sequence at time t_k and take it as inital guess at t_k+1
 
+    // Plot bounding volumes
     geometry_msgs::Point point;
     point.x = 0;
     point.y = 0;
     point.z = 0;
 
-//    for(int i = 0; i < bvh_points_.size(); i++)
-//    {
-//        Function fk_sx = Function("fk_sx", {x_}, {bvh_points_.at(i)});
-//        SX result = fk_sx(sx_x_new).at(0);
-//
-//        point.x = (double)result(0);
-//        point.y = (double)result(1);
-//        point.z = (double)result(2);
-//
-//        visualizeBVH(point, min_dist, i);
-//    }
-
-    Function fk_test = Function("fk_", {x_}, {p_c});
-
-    if(base_active_){
-        SX p_base = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)});
-
-        Function fk_test_base = Function("fk_base_", {x_}, {p_base});
-
-        SX test_base = fk_test_base(sx_x_new).at(0);
-        vector<double> base_vec;
-        base_vec.clear();
-        base_vec.push_back((double)test_base(0));
-        base_vec.push_back((double)test_base(1));
-        base_vec.push_back((double)test_base(2));
-
-        ROS_WARN_STREAM("BASE Position: \n" << base_vec);
-    }
-    vector<double> state_vec;
-    for(int i = 0; i < state.rows(); i++)
+    SX result;
+    for( it_scm = self_collision_map_.begin(); it_scm != self_collision_map_.end(); it_scm++)
     {
-        state_vec.push_back((double)state.data(i));
+        vector<string> tmp = it_scm->second;
+
+        for(int i=0; i<tmp.size();i++)
+        {
+            vector<vector<SX>> SX_vec = bvh_matrix[tmp.at(i)];
+            for(int k=0; k<SX_vec.size(); k++)
+            {
+                SX test = SX::horzcat({SX_vec.at(k).at(0)});
+                Function tesssst = Function("test", {x_}, {test});
+                result = tesssst(sx_x_new).at(0);
+                point.x = (double)result(0);
+                point.y = (double)result(1);
+                point.z = (double)result(2);
+
+                bv_radius = 0.1;
+                visualizeBVH(point, bv_radius, i+i*tmp.size());
+            }
+        }
+
+
+        vector<vector<SX>> SX_vec = bvh_matrix[it_scm->first];
+        for(int k=0; k<SX_vec.size(); k++)
+        {
+            SX test = SX::horzcat({SX_vec.at(k).at(0)});
+            Function tesssst = Function("test", {x_}, {test});
+            result = tesssst(sx_x_new).at(0);
+            point.x = (double)result(0);
+            point.y = (double)result(1);
+            point.z = (double)result(2);
+
+            if(it_scm->first == "body")
+            {
+                bv_radius = bvb_radius_.at(k);
+            }
+            else
+            {
+                bv_radius = 0.1;
+            }
+            visualizeBVH(point, bv_radius, k+tmp.size()+SX_vec.size());
+        }
     }
-
-    SX state_v = SX::vertcat({state_vec});
-
-    SX test_v = fk_test(sx_x_new).at(0);
-
-    state_vec.clear();
-    state_vec.push_back((double)test_v(0));
-    state_vec.push_back((double)test_v(1));
-    state_vec.push_back((double)test_v(2));
-    ROS_INFO_STREAM("Joint values:" <<x_new);
-    ROS_WARN_STREAM("Goal: \n" << pose.position.x <<", " << pose.position.y << ", " << pose.position.z);
-    ROS_WARN_STREAM("Current Position: \n" << state_vec);
-
-//    ROS_WARN_STREAM(q_dot);
     return q_dot;
 }
 
@@ -811,7 +908,7 @@ void CobNonlinearMPC::visualizeBVH(const geometry_msgs::Point point, double radi
     marker.lifetime = ros::Duration();
     marker.action = visualization_msgs::Marker::ADD;
     marker.ns = "preview";
-    marker.header.frame_id = "world";
+    marker.header.frame_id = "odom_combined";
 
 
     marker.scale.x = 2*radius;
