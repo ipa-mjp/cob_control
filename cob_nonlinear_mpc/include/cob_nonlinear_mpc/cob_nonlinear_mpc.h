@@ -57,6 +57,8 @@ struct Robot
     int dof;
     urdf::Model urdf;
     KDL::Chain kinematic_chain;
+    std::vector<KDL::Joint> joints;
+    std::vector<KDL::Segment> forward_kinematics;
 };
 
 struct DH
