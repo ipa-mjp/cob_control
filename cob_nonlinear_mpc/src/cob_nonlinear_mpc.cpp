@@ -143,59 +143,7 @@ bool CobNonlinearMPC::initialize()
 
     this->generate_symbolic_forward_kinematics();
 
-    // Get bounding volume forward kinematics
-    for(int i=0; i<transform_vec_bvh_.size(); i++)
-    {
-        T_BVH bvh = transform_vec_bvh_.at(i);
-        std::vector<SX> bvh_arm;
-        if(i-1<0)
-        {
-            SX transform = mtimes(fk_vector_.at(i),bvh.T);
-            SX tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
-            bvh_arm.push_back(tmp);
-            bvh_matrix[bvh.link].push_back(bvh_arm);
-
-            if(bvh.constraint)
-            {
-                bvh_arm.clear();
-                tmp.clear();
-                transform = mtimes(fk_vector_.at(i),bvh.BVH_p);
-                tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
-                bvh_arm.push_back(tmp);
-                bvh_matrix[bvh.link].push_back(bvh_arm);
-            }
-        }
-        else
-        {
-            bvh_arm.clear();
-            SX transform = mtimes(fk_vector_.at(i-1),bvh.T);
-            SX tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
-            bvh_arm.push_back(tmp);
-            bvh_matrix[bvh.link].push_back(bvh_arm);
-            bvh_arm.clear();
-
-            if(bvh.constraint)
-            {
-                tmp.clear();
-                transform = mtimes(fk_vector_.at(i-1),bvh.BVH_p);
-                tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
-                bvh_arm.push_back(tmp);
-                bvh_matrix[bvh.link].push_back(bvh_arm);
-            }
-        }
-    }
-    if(base_active_)
-    {
-        for(int i=0; i<bvb_positions_.size(); i++)
-        {
-            std::vector<SX> base_bvh;
-            SX tmp = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+bvb_positions_.at(i)});
-            base_bvh.push_back(tmp);
-            bvh_matrix["body"].push_back(base_bvh);
-        }
-
-    }
-
+    this->generate_bounding_volumes();
 
     vector<double> tmp;
     for(int k=0; k < num_shooting_nodes_; ++k)
@@ -220,7 +168,7 @@ bool CobNonlinearMPC::initialize()
         x_open_loop_.push_back(tmp);
     }
 
-    joint_state_ = KDL::JntArray(chain_.getNrOfJoints());
+    joint_state_ = KDL::JntArray(robot_.kinematic_chain.getNrOfJoints());
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
 
     if(base_active_){
@@ -380,7 +328,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX q_d = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
 
     // Prevent collision with Base_link
- SX barrier;
+    SX barrier;
     SX dist;
 
     std::unordered_map<std::string, std::vector<std::string> >::iterator it_scm;
@@ -437,15 +385,16 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX error_attitute = SX::vertcat({ e_quat(1), e_quat(2), e_quat(3)});
 
     // L2 norm of the control signal
-    SX R = 1*SX::vertcat({100, 100, 100, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
+    SX R = SX::scalar_matrix(control_dim_,1,1);;
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
 
     // L2 norm of the states
-    SX S = 0.1*SX::vertcat({0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
+    std::vector<int> state_convariance(state_dim_,1);
+    SX S = 0.01*SX::scalar_matrix(state_dim_,1,1);
     SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
 
     // Objective
-    SX L = 10*dot(p_c-x_d,p_c-x_d) + energy + 10 * dot(error_attitute,error_attitute) + barrier;
+    SX L = 10*dot(p_c-x_d,p_c-x_d) ;//+ energy + 10 * dot(error_attitute,error_attitute) + barrier;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -544,12 +493,12 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     opts["print_time"] = true;
     opts["expand"] = true;  // Removes overhead
 
-    // Create an NLP solver and buffers
+    ROS_INFO("Create an NLP solver and buffers");
     Function solver = nlpsol("nlpsol", "ipopt", nlp, opts);
 
     std::map<std::string, DM> arg, res;
 
-    // Bounds and initial guess
+    ROS_INFO("Bounds and initial guess");
     arg["lbx"] = v_min;
     arg["ubx"] = v_max;
     arg["lbg"] = 0;
