@@ -12,16 +12,18 @@
  * \note
  *   Project name: care-o-bot
  * \note
- *   ROS stack name: cob_driver
+ *   ROS stack name: cob_control
  * \note
  *   ROS package name: cob_nonlinear_mpc
  *
  * \author
- *   Author: Christoph Mark, email: Christoph.Mark@ipa.fraunhofer.de
+ *   Author: Bruno Brito  email: Bruno.Brito@ipa.fraunhofer.de
+ *   Christoph Mark, email: Christoph.Mark@ipa.fraunhofer.de
  *
  * \date Date of creation: April, 2017
  *
  * \brief
+ *
  *
  ****************************************************************/
 
