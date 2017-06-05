@@ -45,12 +45,6 @@ private:
     int state_dim_;
     int control_dim_;
 
-    // PATH CONSTRAINTS
-    vector<double> state_path_constraints_min_, state_path_constraints_max_;
-    vector<double> state_terminal_constraints_min_, state_terminal_constraints_max_;
-    vector<double> input_constraints_min_, input_constraints_max_;
-
-
 public:
     MPC(int num_shooting_nodes,double time_horizon ,int state_dim,int control_dim)
     {
@@ -60,6 +54,11 @@ public:
         control_dim_=control_dim;
     }
     ~MPC(){}
+
+    // PATH CONSTRAINTS
+    vector<double> state_path_constraints_min_, state_path_constraints_max_;
+    vector<double> state_terminal_constraints_min_, state_terminal_constraints_max_;
+    vector<double> input_constraints_min_, input_constraints_max_;
 
     int get_num_shooting_nodes();
 

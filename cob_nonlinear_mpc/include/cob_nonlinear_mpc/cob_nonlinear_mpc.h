@@ -140,11 +140,6 @@ private:
     SX p_;
     tf::TransformListener tf_listener_;
 
-    // Constraints
-    vector<double> state_path_constraints_min_, state_path_constraints_max_;
-    vector<double> state_terminal_constraints_min_, state_terminal_constraints_max_;
-    vector<double> input_constraints_min_, input_constraints_max_;
-
     ros::Subscriber jointstate_sub_;
     ros::Subscriber odometry_sub_;
     ros::Subscriber frame_tracker_sub_;

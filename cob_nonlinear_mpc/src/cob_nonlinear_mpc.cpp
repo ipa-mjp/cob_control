@@ -56,13 +56,7 @@ bool CobNonlinearMPC::initialize()
         ROS_ERROR("Parameter 'joint_names' not set");
         return false;
     }
-
     // nh_nmpc
-    if (!nh_nmpc.getParam("transformations", transformation_names_))
-    {
-        ROS_ERROR("Parameter 'transformation_names' not set");
-        return false;
-    }
     int num_shooting_nodes;
     if (!nh_nmpc.getParam("shooting_nodes", num_shooting_nodes))
     {
@@ -303,10 +297,10 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     double min_dist = 0.15;
 
     // Bounds and initial guess for the control
-    ROS_INFO_STREAM("input_constraints_min_: " <<input_constraints_min_.size());
-    ROS_INFO_STREAM("input_constraints_max_: " <<input_constraints_max_.size());
-    vector<double> u_min =  input_constraints_min_;
-    vector<double> u_max  = input_constraints_max_;
+    ROS_INFO_STREAM("input_constraints_min_: " <<mpc_ctr_->input_constraints_min_.size());
+    ROS_INFO_STREAM("input_constraints_max_: " <<mpc_ctr_->input_constraints_max_.size());
+    vector<double> u_min =  mpc_ctr_->input_constraints_min_;
+    vector<double> u_max  = mpc_ctr_->input_constraints_max_;
 
     ROS_INFO("Bounds and initial guess for the state");
     vector<double> x0_min;
@@ -320,10 +314,10 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
         x_init.push_back(state(i));
     }
 
-    vector<double> x_min  = state_path_constraints_min_;
-    vector<double> x_max  = state_path_constraints_max_;
-    vector<double> xf_min = state_terminal_constraints_min_;
-    vector<double> xf_max = state_terminal_constraints_max_;
+    vector<double> x_min  = mpc_ctr_->state_path_constraints_min_;
+    vector<double> x_max  = mpc_ctr_->state_path_constraints_max_;
+    vector<double> xf_min = mpc_ctr_->state_terminal_constraints_min_;
+    vector<double> xf_max = mpc_ctr_->state_terminal_constraints_max_;
 
     ROS_INFO("ODE right hand side and quadrature");
     SX qdot = SX::vertcat({u_});
