@@ -32,9 +32,48 @@
 
 #include <ros/ros.h>
 
-#include <stdlib.h>
+#include <sensor_msgs/JointState.h>
+#include <geometry_msgs/Twist.h>
+#include <std_msgs/Float64MultiArray.h>
+#include <nav_msgs/Odometry.h>
 
+#include <urdf/model.h>
+
+#include <kdl_parser/kdl_parser.hpp>
+#include <kdl/jntarray.hpp>
+#include <kdl/jntarrayvel.hpp>
+#include <kdl/frames.hpp>
+
+#include <tf/transform_listener.h>
+#include <tf/tf.h>
+#include <visualization_msgs/MarkerArray.h>
+
+#include <ctime>
+#include <casadi/casadi.hpp>
+
+#include <boost/thread/mutex.hpp>
+#include <boost/shared_ptr.hpp>
+
+using namespace casadi;
 using namespace std;
+
+struct T_BVH
+{
+    SX T;
+    SX BVH_p;
+    string link;
+    bool constraint = false;
+};
+
+struct Robot
+{
+    int dof;
+    urdf::Model urdf;
+    KDL::Chain kinematic_chain;
+    std::vector<KDL::Joint> joints;
+    std::vector<KDL::Segment> forward_kinematics;
+    bool base_active_;
+};
 
 class MPC
 {
@@ -44,6 +83,38 @@ private:
     double time_horizon_;
     int state_dim_;
     int control_dim_;
+    int NV;
+
+    vector<vector<double>> u_open_loop_;
+    vector<vector<double>> x_open_loop_;
+
+    vector<double> u_init_;
+    // Symbolic variables
+    SX u_; //control symbolic input
+    SX x_; //robot symbolic state
+
+    SX fk_; //Forward kinematics
+    SX fk_base_; //Base Forward kinematics
+    std::vector<SX> fk_vector_; // Forward kinematics for each link
+
+    //Bounding volumes
+    std::vector<SX> bvh_points_;
+    std::vector<T_BVH> transform_vec_bvh_;
+    std::vector<SX> transform_base_vec_;
+
+    std::map<string,vector<vector<SX>>> bvh_matrix;
+
+    XmlRpc::XmlRpcValue scm_;
+    XmlRpc::XmlRpcValue bvb_;
+
+    vector<double> bvb_positions_;
+    vector<double> bvb_radius_;
+
+    visualization_msgs::MarkerArray marker_array_;
+
+    std::unordered_map<std::string, std::vector<std::string> > self_collision_map_;
+
+    ros::NodeHandle nh_;
 
 public:
     MPC(int num_shooting_nodes,double time_horizon ,int state_dim,int control_dim)
@@ -52,6 +123,8 @@ public:
         time_horizon_=time_horizon;
         state_dim_=state_dim;
         control_dim_=control_dim;
+
+        marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("nmpc/bvh", 1);
     }
     ~MPC(){}
 
@@ -59,6 +132,10 @@ public:
     vector<double> state_path_constraints_min_, state_path_constraints_max_;
     vector<double> state_terminal_constraints_min_, state_terminal_constraints_max_;
     vector<double> input_constraints_min_, input_constraints_max_;
+
+    ros::Publisher marker_pub_;
+
+    void init();
 
     int get_num_shooting_nodes();
 
@@ -74,6 +151,20 @@ public:
 
     void set_input_constraints(vector<double> input_constraints_min,vector<double> input_constraints_max);
 
+    void generate_symbolic_forward_kinematics(Robot* robot);
+
+    SX quaternion_product(SX q1, SX q2);
+
+    SX dual_quaternion_product(SX q1, SX q2);
+
+    Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state, Robot* robot);
+
+    Function create_integrator(const unsigned int state_dim, const unsigned int control_dim, const double T,
+                               const unsigned int N, SX ode, SX x, SX u, SX L);
+
+    void visualizeBVH(const geometry_msgs::Point point, double radius, int id);
+
+    void generate_bounding_volumes(Robot* robot);
 };
 
 #endif  // NONLINEAR_MPC_H

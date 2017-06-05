@@ -55,7 +55,7 @@ bool CobNonlinearMPC::process_KDL_tree(){
     }
 
     robot_tree_.getChain(chain_base_link_, chain_tip_link_, robot_.kinematic_chain);
-    if (chain_.getNrOfJoints() == 0)
+    if (robot_.kinematic_chain.getNrOfJoints() == 0)
     {
         ROS_ERROR("Failed to initialize kinematic chain");
         return false;
@@ -82,11 +82,11 @@ bool CobNonlinearMPC::process_KDL_tree(){
 
     KDL::Frame F;
     double roll,pitch,yaw;
-    for (uint16_t i = 0; i < chain_.getNrOfSegments(); i++)
+    for (uint16_t i = 0; i < robot_.kinematic_chain.getNrOfSegments(); i++)
     {
-        robot_.joints.push_back(chain_.getSegment(i).getJoint());
-        ROS_INFO_STREAM("Chain segment "<< chain_.getSegment(i).getName());
-        F=chain_.getSegment(i).getFrameToTip();
+        robot_.joints.push_back(robot_.kinematic_chain.getSegment(i).getJoint());
+        ROS_INFO_STREAM("Chain segment "<< robot_.kinematic_chain.getSegment(i).getName());
+        F=robot_.kinematic_chain.getSegment(i).getFrameToTip();
         F.M.GetRPY(roll,pitch,yaw);
 #ifdef __DEBUG__
         ROS_INFO_STREAM("Chain frame "<< " X: " << F.p.x()<< " Y: " << F.p.y()<< " Z: "<<F.p.z());
@@ -136,12 +136,12 @@ bool CobNonlinearMPC::process_KDL_tree(){
             if(robot_.joints.at(i).getType()==0) //revolute joint
             {
 
-                KDL::Frame f = robot_.forward_kinematics.at(i-1).getFrameToTip()*chain_.getSegment(i).getFrameToTip();
-                KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
+                KDL::Frame f = robot_.forward_kinematics.at(i-1).getFrameToTip()*robot_.kinematic_chain.getSegment(i).getFrameToTip();
+                KDL::Segment link(robot_.kinematic_chain.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
                 robot_.forward_kinematics.push_back(link);
                 if(i==0)//First joint
                 {
-                    KDL::Segment link(chain_.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),chain_.getSegment(i).getFrameToTip(),KDL::RigidBodyInertia::Zero());
+                    KDL::Segment link(robot_.kinematic_chain.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),robot_.kinematic_chain.getSegment(i).getFrameToTip(),KDL::RigidBodyInertia::Zero());
                     robot_.forward_kinematics.push_back(link);
                 }
                 else
@@ -157,7 +157,7 @@ bool CobNonlinearMPC::process_KDL_tree(){
                 rot=robot_.kinematic_chain.getSegment(i).getFrameToTip().M;
                 pos=robot_.kinematic_chain.getSegment(i).getFrameToTip().p;
                 ROS_INFO("Rotational joint");
-                ROS_INFO_STREAM("Joint name "<< chain_.getSegment(i).getJoint().getName());
+                ROS_INFO_STREAM("Joint name "<< robot_.kinematic_chain.getSegment(i).getJoint().getName());
                 ROS_INFO_STREAM("Joint position "<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
                 ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
                 ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());            //F_previous.p= pos;
@@ -165,148 +165,4 @@ bool CobNonlinearMPC::process_KDL_tree(){
             }
         }
 
-}
-
-void CobNonlinearMPC::generate_symbolic_forward_kinematics(){
-    // Casadi symbolics
-        u_ = SX::sym("u", mpc_ctr_->get_control_dim());  // control
-        x_ = SX::sym("x", mpc_ctr_->get_state_dim()); // states
-
-        SX T = SX::sym("T",4,4);
-        if(robot_.base_active_){
-            ////generic rotation matrix around z and translation vector for x and y
-            T(0,0) = cos(x_(2)); T(0,1) = -sin(x_(2));  T(0,2) = 0.0; T(0,3) = x_(0);
-            T(1,0) = sin(x_(2)); T(1,1) = cos(x_(2));   T(1,2) = 0.0; T(1,3) = x_(1);
-            T(2,0) = 0.0;        T(2,1) = 0.0;          T(2,2) = 1.0; T(2,3) = 0;
-            T(3,0) = 0.0;        T(3,1) = 0.0;          T(3,2) = 0.0; T(3,3) = 1.0;
-            fk_base_ = T; //Base forward kinematics
-        }
-        int offset;
-
-        for(int i=0;i<robot_.kinematic_chain.getNrOfSegments();i++){
-
-            KDL::Vector pos;
-            KDL::Rotation rot;
-            rot=robot_.kinematic_chain.getSegment(i).getFrameToTip().M;
-            pos=robot_.kinematic_chain.getSegment(i).getFrameToTip().p;
-    #ifdef __DEBUG__
-            ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
-            ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
-    #endif
-            if(robot_.base_active_){ // if base active first initial control variable belong to the base
-                // here each joint is considered to be revolute.. code needs to be updated for prismatic
-                //rotation matrix of the joint * homogenic transformation matrix of the next joint relative to the previous
-                T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
-                T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
-                T(0,2) = rot(0,2); T(0,3) = pos.x();
-                T(1,0) = rot(1,0)*cos(x_(i+3))+rot(1,1)*sin(x_(i+3));
-                T(1,1) = -rot(1,0)*sin(x_(i+3))+rot(1,1)*cos(x_(i+3));
-                T(1,2) = rot(1,2); T(1,3) = pos.y();
-                T(2,0) = rot(2,0)*cos(x_(i+3))+rot(2,1)*sin(x_(i+3));
-                T(2,1) = -rot(2,0)*sin(x_(i+3))+rot(2,1)*cos(x_(i+3));
-                T(2,2) = rot(2,2); T(2,3) = pos.z();
-                T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
-            }
-            else{
-                T(0,0) = rot(0,0)*cos(x_(i))+rot(0,1)*sin(x_(i));
-                T(0,1) = -rot(0,0)*sin(x_(i))+rot(0,1)*cos(x_(i));
-                T(0,2) = rot(0,2); T(0,3) = pos.x();
-                T(1,0) = rot(1,0)*cos(x_(i))+rot(1,1)*sin(x_(i));
-                T(1,1) = -rot(1,0)*sin(x_(i))+rot(1,1)*cos(x_(i));
-                T(1,2) = rot(1,2); T(1,3) = pos.y();
-                T(2,0) = rot(2,0)*cos(x_(i))+rot(2,1)*sin(x_(i));
-                T(2,1) = -rot(2,0)*sin(x_(i))+rot(2,1)*cos(x_(i));
-                T(2,2) = rot(2,2); T(2,3) = pos.z();
-                T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
-            }
-
-            T_BVH p;
-            p.link = robot_.kinematic_chain.getSegment(i).getName();
-            p.T = T;
-            transform_vec_bvh_.push_back(p);
-        }
-
-        // Get Endeffector FK
-        for(int i=0; i< transform_vec_bvh_.size(); i++)
-        {
-            if(robot_.base_active_)
-            {
-                if(i==0)
-                {
-                    ROS_WARN("BASE IS ACTIVE");
-                    fk_ = mtimes(fk_base_,transform_vec_bvh_.at(i).T);
-                }
-                else
-                {
-                    fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
-                }
-            }
-            else
-            {
-                if(i==0)
-                {
-                    fk_ = transform_vec_bvh_.at(i).T;
-                }
-                else
-                {
-                    fk_ = mtimes(fk_,transform_vec_bvh_.at(i).T);
-                }
-            }
-            fk_vector_.push_back(fk_); // stacks up multiplied transformation until link n
-        }
-}
-
-void CobNonlinearMPC::generate_bounding_volumes(){
-    // Get bounding volume forward kinematics
-        for(int i=0; i<transform_vec_bvh_.size(); i++)
-        {
-            T_BVH bvh = transform_vec_bvh_.at(i);
-            std::vector<SX> bvh_arm;
-            if(i-1<0)
-            {
-                SX transform = mtimes(fk_vector_.at(i),bvh.T);
-                SX tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
-                bvh_arm.push_back(tmp);
-                bvh_matrix[bvh.link].push_back(bvh_arm);
-
-                if(bvh.constraint)
-                {
-                    bvh_arm.clear();
-                    tmp.clear();
-                    transform = mtimes(fk_vector_.at(i),bvh.BVH_p);
-                    tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
-                    bvh_arm.push_back(tmp);
-                    bvh_matrix[bvh.link].push_back(bvh_arm);
-                }
-            }
-            else
-            {
-                bvh_arm.clear();
-                SX transform = mtimes(fk_vector_.at(i-1),bvh.T);
-                SX tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
-                bvh_arm.push_back(tmp);
-                bvh_matrix[bvh.link].push_back(bvh_arm);
-                bvh_arm.clear();
-
-                if(bvh.constraint)
-                {
-                    tmp.clear();
-                    transform = mtimes(fk_vector_.at(i-1),bvh.BVH_p);
-                    tmp = SX::vertcat({transform(0,3), transform(1,3), transform(2,3)});
-                    bvh_arm.push_back(tmp);
-                    bvh_matrix[bvh.link].push_back(bvh_arm);
-                }
-            }
-        }
-        if(robot_.base_active_)
-        {
-            for(int i=0; i<bvb_positions_.size(); i++)
-            {
-                std::vector<SX> base_bvh;
-                SX tmp = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)+bvb_positions_.at(i)});
-                base_bvh.push_back(tmp);
-                bvh_matrix["body"].push_back(base_bvh);
-            }
-
-        }
 }
