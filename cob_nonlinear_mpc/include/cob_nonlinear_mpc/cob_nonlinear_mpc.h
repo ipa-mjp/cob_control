@@ -69,16 +69,6 @@ struct Robot
     bool base_active_;
 };
 
-struct DH
-{
-    double alpha;
-    double a;
-    std::string d;
-    std::string theta;
-
-    std::string type;
-};
-
 struct T_BVH
 {
     SX T;
@@ -103,11 +93,9 @@ private:
     urdf::Model model;
     Robot robot_;
     KDL::Chain chain_;
+    double min_dist;
 
-    DH dh_param;
     boost::shared_ptr<MPC> mpc_ctr_;
-    std::vector<DH> dh_params;
-    std::vector<DH> dh_params_base_;
 
     std::vector<SX> transformation_vector_dual_quat_;
 

@@ -131,6 +131,12 @@ bool CobNonlinearMPC::initialize()
     }
     mpc_ctr_->set_input_constraints(input_constraints_min,input_constraints_max);
 
+    if (!nh_nmpc_constraints.getParam("min_distance", min_dist))
+    {
+            ROS_ERROR("Parameter 'input/input_constraints/min' not set");
+            return false;
+    }
+
     // Chain
     if (!nh_.getParam("chain_base_link", chain_base_link_))
     {
@@ -254,7 +260,6 @@ void CobNonlinearMPC::jointstateCallback(const sensor_msgs::JointState::ConstPtr
     joint_state_ = q_temp;
 }
 
-
 void CobNonlinearMPC::odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
     KDL::JntArray temp = odometry_state_;
@@ -293,8 +298,6 @@ KDL::JntArray CobNonlinearMPC::getJointState()
 Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
                                           const KDL::JntArray& state)
 {
-    // Distance to obstacle
-    double min_dist = 0.15;
 
     // Bounds and initial guess for the control
     ROS_INFO_STREAM("input_constraints_min_: " <<mpc_ctr_->input_constraints_min_.size());
