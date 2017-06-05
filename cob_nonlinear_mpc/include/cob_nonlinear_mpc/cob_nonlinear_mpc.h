@@ -51,6 +51,11 @@
 #include <ctime>
 #include <casadi/casadi.hpp>
 
+#include <cob_nonlinear_mpc/nonlinear_mpc.h>
+
+#include <boost/thread/mutex.hpp>
+#include <boost/shared_ptr.hpp>
+
 using namespace casadi;
 using namespace std;
 
@@ -61,6 +66,7 @@ struct Robot
     KDL::Chain kinematic_chain;
     std::vector<KDL::Joint> joints;
     std::vector<KDL::Segment> forward_kinematics;
+    bool base_active_;
 };
 
 struct DH
@@ -99,6 +105,7 @@ private:
     KDL::Chain chain_;
 
     DH dh_param;
+    boost::shared_ptr<MPC> mpc_ctr_;
     std::vector<DH> dh_params;
     std::vector<DH> dh_params_base_;
 
@@ -111,10 +118,6 @@ private:
 
 //    std::vector<vector<SX>> bvh_matrix;
     std::map<string,vector<vector<SX>>> bvh_matrix;
-    int state_dim_;
-    int control_dim_;
-    int num_shooting_nodes_;
-    double time_horizon_;
 
     XmlRpc::XmlRpcValue scm_;
     XmlRpc::XmlRpcValue bvb_;
@@ -156,7 +159,6 @@ private:
     vector<vector<double>> u_open_loop_;
     vector<vector<double>> x_open_loop_;
 
-    bool base_active_;
     vector<double> u_init_;
 
 

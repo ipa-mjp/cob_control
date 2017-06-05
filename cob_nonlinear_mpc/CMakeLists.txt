@@ -41,7 +41,7 @@ FIND_LIBRARY(libacado libacado_toolkit_s.so ${ACADO_DIR}/build/lib)
 
 ## internal libraries
 
-add_library(nonlinear_mpc src/cob_nonlinear_mpc.cpp src/utilities/nonlinear_mpc_utilities.cpp)
+add_library(nonlinear_mpc src/cob_nonlinear_mpc.cpp src/nonlinear_mpc.cpp src/utilities/nonlinear_mpc_utilities.cpp)
 add_dependencies(nonlinear_mpc ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(nonlinear_mpc ${CASADI_LIBRARIES} ${catkin_LIBRARIES} ${orocos_kdl_LIBRARIES})
 

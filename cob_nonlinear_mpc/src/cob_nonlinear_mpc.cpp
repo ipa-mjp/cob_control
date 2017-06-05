@@ -63,68 +63,79 @@ bool CobNonlinearMPC::initialize()
         ROS_ERROR("Parameter 'transformation_names' not set");
         return false;
     }
-
-    if (!nh_nmpc.getParam("shooting_nodes", num_shooting_nodes_))
+    int num_shooting_nodes;
+    if (!nh_nmpc.getParam("shooting_nodes", num_shooting_nodes))
     {
         ROS_ERROR("Parameter 'num_shooting_nodes_' not set");
         return false;
     }
-
-    if (!nh_nmpc.getParam("time_horizon", time_horizon_))
+    double time_horizon;
+    if (!nh_nmpc.getParam("time_horizon", time_horizon))
     {
         ROS_ERROR("Parameter 'time_horizon' not set");
         return false;
     }
-
-    if (!nh_nmpc.getParam("state_dim", state_dim_))
+    int state_dim;
+    if (!nh_nmpc.getParam("state_dim", state_dim))
     {
         ROS_ERROR("Parameter 'state_dim' not set");
         return false;
     }
-    if (!nh_nmpc.getParam("control_dim", control_dim_))
+    int control_dim;
+    if (!nh_nmpc.getParam("control_dim", control_dim))
     {
         ROS_ERROR("Parameter 'control_dim' not set");
         return false;
     }
-    if (!nh_nmpc.getParam("base/base_active", base_active_))
+
+    mpc_ctr_.reset(new MPC(num_shooting_nodes,time_horizon ,state_dim,control_dim));
+    if (!nh_nmpc.getParam("base/base_active", robot_.base_active_))
     {
         ROS_ERROR("Parameter 'base/base_active' not set");
         return false;
     }
 
     // nh_nmpc_constraints
-    if (!nh_nmpc_constraints.getParam("state/path_constraints/min", state_path_constraints_min_))
+    vector<double> state_path_constraints_min;
+    if (!nh_nmpc_constraints.getParam("state/path_constraints/min", state_path_constraints_min))
     {
         ROS_ERROR("Parameter 'state/path_constraints/min' not set");
         return false;
     }
-    if (!nh_nmpc_constraints.getParam("state/path_constraints/max", state_path_constraints_max_))
+    vector<double> state_path_constraints_max;
+    if (!nh_nmpc_constraints.getParam("state/path_constraints/max", state_path_constraints_max))
     {
         ROS_ERROR("Parameter 'state/path_constraints/max' not set");
         return false;
     }
+    mpc_ctr_->set_path_constraints(state_path_constraints_min,state_path_constraints_max);
 
-    if (!nh_nmpc_constraints.getParam("state/terminal_constraints/min", state_terminal_constraints_min_))
+    vector<double> state_terminal_constraints_min;
+    if (!nh_nmpc_constraints.getParam("state/terminal_constraints/min", state_terminal_constraints_min))
     {
         ROS_ERROR("Parameter 'state/terminal_constraints/min' not set");
         return false;
     }
-    if (!nh_nmpc_constraints.getParam("state/terminal_constraints/max", state_terminal_constraints_max_))
+    vector<double> state_terminal_constraints_max;
+    if (!nh_nmpc_constraints.getParam("state/terminal_constraints/max", state_terminal_constraints_max))
     {
         ROS_ERROR("Parameter 'state/terminal_constraints/max' not set");
         return false;
     }
-
-    if (!nh_nmpc_constraints.getParam("input/input_constraints/min", input_constraints_min_))
+    mpc_ctr_->set_state_constraints(state_terminal_constraints_min,state_terminal_constraints_max);
+    vector<double> input_constraints_min;
+    if (!nh_nmpc_constraints.getParam("input/input_constraints/min", input_constraints_min))
     {
         ROS_ERROR("Parameter 'input/input_constraints/min' not set");
         return false;
     }
-    if (!nh_nmpc_constraints.getParam("input/input_constraints/max", input_constraints_max_))
+    vector<double> input_constraints_max;
+    if (!nh_nmpc_constraints.getParam("input/input_constraints/max", input_constraints_max))
     {
         ROS_ERROR("Parameter 'input/input_constraints/max' not set");
         return false;
     }
+    mpc_ctr_->set_input_constraints(input_constraints_min,input_constraints_max);
 
     // Chain
     if (!nh_.getParam("chain_base_link", chain_base_link_))
@@ -146,21 +157,21 @@ bool CobNonlinearMPC::initialize()
     this->generate_bounding_volumes();
 
     vector<double> tmp;
-    for(int k=0; k < num_shooting_nodes_; ++k)
+    for(int k=0; k < mpc_ctr_->get_num_shooting_nodes(); ++k)
     {
         tmp.clear();
-        for(int i=0; i < control_dim_; ++i)
+        for(int i=0; i < mpc_ctr_->get_control_dim(); ++i)
         {
             tmp.push_back(0);
         }
         u_open_loop_.push_back(tmp);
     }
 
-    for(int k=1; k <= num_shooting_nodes_; ++k)
+    for(int k=1; k <= mpc_ctr_->get_num_shooting_nodes(); ++k)
     {
         tmp.clear();
 
-        for(int i=0; i < state_dim_; ++i)
+        for(int i=0; i < mpc_ctr_->get_state_dim(); ++i)
         {
             tmp.push_back(0);
         }
@@ -168,16 +179,16 @@ bool CobNonlinearMPC::initialize()
         x_open_loop_.push_back(tmp);
     }
 
-    for(int i = 0; i < control_dim_; i++)
+    for(int i = 0; i < mpc_ctr_->get_control_dim(); i++)
     {
-        ROS_INFO_STREAM("CONTROL DIM: "<<control_dim_);
+        ROS_INFO_STREAM("CONTROL DIM: "<<mpc_ctr_->get_control_dim());
         u_init_.push_back(0);
     }
 
     joint_state_ = KDL::JntArray(robot_.kinematic_chain.getNrOfJoints());
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
 
-    if(base_active_){
+    if(robot_.base_active_){
         odometry_state_ = KDL::JntArray(3);
         odometry_sub_ = nh_.subscribe("base/odometry", 1, &CobNonlinearMPC::odometryCallback, this);
         base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);
@@ -199,7 +210,7 @@ void CobNonlinearMPC::FrameTrackerCallback(const geometry_msgs::Pose::ConstPtr& 
     geometry_msgs::Twist base_vel_msg;
     std_msgs::Float64MultiArray vel_msg;
 
-    if(base_active_){
+    if(robot_.base_active_){
         base_vel_msg.linear.x = qdot(0);
         base_vel_msg.linear.y = qdot(1);
         base_vel_msg.linear.z = 0;
@@ -392,22 +403,22 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     SX error_attitute = SX::vertcat({ e_quat(1), e_quat(2), e_quat(3)});
 
     // L2 norm of the control signal
-    SX R = SX::scalar_matrix(control_dim_,1,1);;
+    SX R = SX::scalar_matrix(mpc_ctr_->get_control_dim(),1,1);;
     SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
 
     // L2 norm of the states
-    std::vector<int> state_convariance(state_dim_,1);
-    SX S = 0.01*SX::scalar_matrix(state_dim_,1,1);
+    std::vector<int> state_convariance(mpc_ctr_->get_state_dim(),1);
+    SX S = 0.01*SX::scalar_matrix(mpc_ctr_->get_state_dim(),1,1);
     SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
 
     // Objective
     SX L = 10*dot(p_c-x_d,p_c-x_d) ;//+ energy + 10 * dot(error_attitute,error_attitute) + barrier;
 
     // Create Euler integrator function
-    Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
+    Function F = create_integrator(mpc_ctr_->get_state_dim(), mpc_ctr_->get_control_dim(), mpc_ctr_->get_time_horizon(), mpc_ctr_->get_num_shooting_nodes(), qdot, x_, u_, L);
 
     // Total number of NLP variables
-    int NV = state_dim_*(num_shooting_nodes_+1) + control_dim_*num_shooting_nodes_;
+    int NV = mpc_ctr_->get_state_dim()*(mpc_ctr_->get_num_shooting_nodes()+1) + mpc_ctr_->get_control_dim()*mpc_ctr_->get_num_shooting_nodes();
 
     // Declare variable vector for the NLP
     MX V = MX::sym("V",NV);
@@ -421,10 +432,10 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     // State at each shooting node and control for each shooting interval
     vector<MX> X, U;
 
-    for(unsigned int k=0; k<num_shooting_nodes_; ++k)
+    for(unsigned int k=0; k<mpc_ctr_->get_num_shooting_nodes(); ++k)
     {
         // Local state
-        X.push_back( V.nz(Slice(offset,offset+state_dim_)));
+        X.push_back( V.nz(Slice(offset,offset+mpc_ctr_->get_state_dim())));
 
         if(k==0)
         {
@@ -437,23 +448,23 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
             v_max.insert(v_max.end(), x_max.begin(), x_max.end());
         }
         v_init.insert(v_init.end(), x_init.begin(), x_init.end());
-        offset += state_dim_;
+        offset += mpc_ctr_->get_state_dim();
 
         // Local control via shift initialization
-        U.push_back( V.nz(Slice(offset,offset+control_dim_)));
+        U.push_back( V.nz(Slice(offset,offset+mpc_ctr_->get_control_dim())));
         v_min.insert(v_min.end(), u_min.begin(), u_min.end());
         v_max.insert(v_max.end(), u_max.begin(), u_max.end());
 
         v_init.insert(v_init.end(), u_init_.begin(), u_init_.end());
-        offset += control_dim_;
+        offset += mpc_ctr_->get_control_dim();
     }
 
     // State at end
-    X.push_back(V.nz(Slice(offset,offset+state_dim_)));
+    X.push_back(V.nz(Slice(offset,offset+mpc_ctr_->get_state_dim())));
     v_min.insert(v_min.end(), xf_min.begin(), xf_min.end());
     v_max.insert(v_max.end(), xf_max.begin(), xf_max.end());
     v_init.insert(v_init.end(), u_init_.begin(), u_init_.end());
-    offset += state_dim_;
+    offset += mpc_ctr_->get_state_dim();
 
     // Make sure that the size of the variable vector is consistent with the number of variables that we have referenced
     casadi_assert(offset==NV);
@@ -465,7 +476,7 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     vector<MX> g;
 
     // Loop over shooting nodes
-    for(unsigned int k=0; k<num_shooting_nodes_; ++k)
+    for(unsigned int k=0; k<mpc_ctr_->get_num_shooting_nodes(); ++k)
     {
         // Create an evaluation node
         MXDict I_out = F( MXDict{ {"x0", X[k]}, {"p", U[k]} });
@@ -512,8 +523,8 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
     vector<double> J_opt(res.at("f"));
 
     // Get the optimal control
-    Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(state_dim_);
-//    Eigen::VectorXd x_new = Eigen::VectorXd::Zero(state_dim_);
+    Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(mpc_ctr_->get_state_dim());
+//    Eigen::VectorXd x_new = Eigen::VectorXd::Zero(mpc_ctr_->get_state_dim());
     vector<double> x_new;
     SX sx_x_new;
     u_open_loop_.clear();
@@ -522,9 +533,9 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 
     for(int i=0; i<1; ++i)  // Copy only the first optimal control sequence
     {
-        for(int j=0; j<control_dim_; ++j)
+        for(int j=0; j<mpc_ctr_->get_control_dim(); ++j)
         {
-            q_dot[j] = V_opt.at(state_dim_ + j);
+            q_dot[j] = V_opt.at(mpc_ctr_->get_state_dim() + j);
             x_new.push_back(V_opt.at(j));
         }
     }

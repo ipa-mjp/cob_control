@@ -169,11 +169,11 @@ bool CobNonlinearMPC::process_KDL_tree(){
 
 void CobNonlinearMPC::generate_symbolic_forward_kinematics(){
     // Casadi symbolics
-        u_ = SX::sym("u", control_dim_);  // control
-        x_ = SX::sym("x", state_dim_); // states
+        u_ = SX::sym("u", mpc_ctr_->get_control_dim());  // control
+        x_ = SX::sym("x", mpc_ctr_->get_state_dim()); // states
 
         SX T = SX::sym("T",4,4);
-        if(base_active_){
+        if(robot_.base_active_){
             ////generic rotation matrix around z and translation vector for x and y
             T(0,0) = cos(x_(2)); T(0,1) = -sin(x_(2));  T(0,2) = 0.0; T(0,3) = x_(0);
             T(1,0) = sin(x_(2)); T(1,1) = cos(x_(2));   T(1,2) = 0.0; T(1,3) = x_(1);
@@ -193,7 +193,7 @@ void CobNonlinearMPC::generate_symbolic_forward_kinematics(){
             ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
             ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
     #endif
-            if(base_active_){ // if base active first initial control variable belong to the base
+            if(robot_.base_active_){ // if base active first initial control variable belong to the base
                 // here each joint is considered to be revolute.. code needs to be updated for prismatic
                 //rotation matrix of the joint * homogenic transformation matrix of the next joint relative to the previous
                 T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
@@ -229,7 +229,7 @@ void CobNonlinearMPC::generate_symbolic_forward_kinematics(){
         // Get Endeffector FK
         for(int i=0; i< transform_vec_bvh_.size(); i++)
         {
-            if(base_active_)
+            if(robot_.base_active_)
             {
                 if(i==0)
                 {
@@ -298,7 +298,7 @@ void CobNonlinearMPC::generate_bounding_volumes(){
                 }
             }
         }
-        if(base_active_)
+        if(robot_.base_active_)
         {
             for(int i=0; i<bvb_positions_.size(); i++)
             {
