@@ -116,12 +116,12 @@ void MPC::generate_symbolic_forward_kinematics(Robot* robot){
 
         KDL::Vector pos;
         KDL::Rotation rot;
-        rot=robot->kinematic_chain.getSegment(i).getFrameToTip().M;
-        pos=robot->kinematic_chain.getSegment(i).getFrameToTip().p;
-#ifdef __DEBUG__
+        rot=robot->joint_frames.at(i).M;
+        pos=robot->joint_frames.at(i).p;
+//#ifdef __DEBUG__
         ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
         ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
-#endif
+//#endif
         if(robot->base_active_){ // if base active first initial control variable belong to the base
         // here each joint is considered to be revolute.. code needs to be updated for prismatic
         //rotation matrix of the joint * homogenic transformation matrix of the next joint relative to the previous
@@ -228,18 +228,18 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
         0.5 * (sign((fk_(1,0) - fk_(0,1)))) * sqrt(fk_(2,2) - fk_(0,0) - fk_(1,1) + 1.0 + kappa)
     });*/
 
-    SX q_c = SX::vertcat({ //current quaternion
+    q_c = SX::vertcat({ //current quaternion
         0.5 * sqrt(fk_(0,0) + fk_(1,1) + fk_(2,2) + 1.0),
         0.5 * ((fk_(2,1) - fk_(1,2))) * sqrt(fk_(0,0) - fk_(1,1) - fk_(2,2) + 1.0),
         0.5 * ((fk_(0,2) - fk_(2,0))) * sqrt(fk_(1,1) - fk_(2,2) - fk_(0,0) + 1.0),
         0.5 * ((fk_(1,0) - fk_(0,1))) * sqrt(fk_(2,2) - fk_(0,0) - fk_(1,1) + 1.0)
     });
 
-    SX x_c = SX::vertcat({fk_(0,3), fk_(1,3), fk_(2,3)}); //current state
+    pos_c = SX::vertcat({fk_(0,3), fk_(1,3), fk_(2,3)}); //current state
 
     ROS_INFO("Desired Goal-pose");
-    SX x_target = SX::vertcat({pose.position.x, pose.position.y, pose.position.z});
-    SX q_target = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
+    pos_target = SX::vertcat({pose.position.x, pose.position.y, pose.position.z});
+    q_target = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
 
     // Prevent collision with Base_link
     SX barrier;
@@ -308,7 +308,12 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
 
     // Objective
-    SX L = 10*dot(x_c-x_target,x_c-x_target) ;//+ energy + 10 * dot(error_attitute,error_attitute) + barrier;
+
+    SX error=pos_c-pos_target;
+    ROS_INFO_STREAM("POSITION ERROR:" << double(error(0)) << double(error(1)) <<double(error(2)));
+    ROS_INFO_STREAM("POSITION TARGET:" << double(pos_target(0)) << double(pos_target(1)) <<double(pos_target(2)));
+    ROS_INFO_STREAM("POSITION:" << double(pos_c(0)) << double(pos_c(1)) <<double(pos_c(2)));
+    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) ;//+ energy + 10 * dot(error_attitute,error_attitute) + barrier;
 
     // Create Euler integrator function
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -408,17 +413,16 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     arg["ubg"] = 0;
     arg["x0"] = v_init;
 
-    // Solve the problem
+    ROS_INFO("Solve the problem");
     res = solver(arg);
 
     // Optimal solution of the NLP
     vector<double> V_opt(res.at("x"));
     vector<double> J_opt(res.at("f"));
 
-    // Get the optimal control
+    ROS_INFO("Get the optimal control");
     Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(state_dim_);
 //    Eigen::VectorXd x_new = Eigen::VectorXd::Zero(mpc_ctr_->get_state_dim());
-    vector<double> x_new;
     SX sx_x_new;
     u_open_loop_.clear();
     x_open_loop_.clear();
@@ -434,16 +438,15 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     }
     sx_x_new = SX::vertcat({x_new});
 
-    sx_x_new = SX::vertcat({x_new});
     // Safe optimal control sequence at time t_k and take it as inital guess at t_k+1
 
-    // Plot bounding volumes
+    ROS_INFO("Plot bounding volumes");
     geometry_msgs::Point point;
     point.x = 0;
     point.y = 0;
     point.z = 0;
 
-    SX result;
+    /*SX result;
     for( it_scm = self_collision_map_.begin(); it_scm != self_collision_map_.end(); it_scm++)
     {
         vector<string> tmp = it_scm->second;
@@ -486,8 +489,37 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
             }
             visualizeBVH(point, bv_radius, k+tmp.size()+SX_vec.size());
         }
-    }
+    }*/
+
+    KDL::Frame ef_pos = forward_kinematics(state);
+
     return q_dot;
+}
+
+KDL::Frame MPC::forward_kinematics(const KDL::JntArray& state){
+
+    KDL::Frame ef_pos; //POsition of the end effector
+
+    //SX p_base = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)});
+
+    Function fk = Function("fk_", {x_}, {pos_c});
+    //Function fk_base = Function("fk_base_", {x_}, {p_base});
+    vector<double> x;
+    for(unsigned int i=0; i < state.rows();i++)
+    {
+        x.push_back(state(i));
+    }
+    SX test_v = fk(SX::vertcat({x})).at(0);
+    //SX test_base = fk_base(SX::vertcat({x_new})).at(0);
+
+    ef_pos.p.x((double)test_v(0));
+    ef_pos.p.y((double)test_v(1));
+    ef_pos.p.z((double)test_v(2));
+    ROS_INFO_STREAM("Joint values:" << x);
+    ROS_WARN_STREAM("Current Position: \n" << ef_pos.p.x() << " "<< ef_pos.p.y() << " "<< ef_pos.p.z() << " ");
+    //ROS_WARN_STREAM("Base Position: \n" << (double)test_base(0) << " "<< (double)test_base(1) << " "<< (double)test_base(2) << " ");
+    ROS_WARN_STREAM("Target Position: \n" << pos_target);
+    return ef_pos;
 }
 
 Function MPC::create_integrator(const unsigned int state_dim, const unsigned int control_dim, const double T,

@@ -93,10 +93,16 @@ private:
     // Symbolic variables
     SX u_; //control symbolic input
     SX x_; //robot symbolic state
+    SX q_c; //Current orientation quaternion
+    SX pos_c ;//Current cartesian position
+    SX pos_target; //Target position
+    SX q_target; //target quaternion orientation
 
     SX fk_; //Forward kinematics
     SX fk_base_; //Base Forward kinematics
     std::vector<SX> fk_vector_; // Forward kinematics for each link
+
+    vector<double> x_new; //new state after computation
 
     //Bounding volumes
     std::vector<SX> bvh_points_;
@@ -157,6 +163,8 @@ public:
     SX quaternion_product(SX q1, SX q2);
 
     SX dual_quaternion_product(SX q1, SX q2);
+
+    KDL::Frame forward_kinematics(const KDL::JntArray& state);
 
     Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state, Robot* robot);
 
