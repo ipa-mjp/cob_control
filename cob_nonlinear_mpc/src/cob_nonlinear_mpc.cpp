@@ -46,8 +46,6 @@
 bool CobNonlinearMPC::initialize()
 {
     ros::NodeHandle nh_nmpc("nmpc");
-    ros::NodeHandle nh_nmpc_dh("nmpc/dh");
-    ros::NodeHandle nh_nmpc_base_dh("nmpc/base/dh");
     ros::NodeHandle nh_nmpc_constraints("nmpc/constraints");
 
     // JointNames
