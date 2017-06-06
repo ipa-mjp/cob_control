@@ -330,15 +330,15 @@ bool CobNonlinearMPC::initialize()
         pos=joint_frames.at(i).p;
         ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",joint_frames.at(i)(0,0),joint_frames.at(i)(0,1),joint_frames.at(i)(0,2),joint_frames.at(i)(1,0),joint_frames.at(i)(1,1),joint_frames.at(i)(1,2),joint_frames.at(i)(2,0),joint_frames.at(i)(2,1),joint_frames.at(i)(2,2));
         ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
-        T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
-        T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
-        T(0,2) = rot(0,2); T(0,3) = pos.x();
-        T(1,0) = rot(1,0)*cos(x_(i+3))+rot(1,1)*sin(x_(i+3));
-        T(1,1) = -rot(1,0)*sin(x_(i+3))+rot(1,1)*cos(x_(i+3));
-        T(1,2) = rot(1,2); T(1,3) = pos.y();
-        T(2,0) = rot(2,0)*cos(x_(i+3))+rot(2,1)*sin(x_(i+3));
-        T(2,1) = -rot(2,0)*sin(x_(i+3))+rot(2,1)*cos(x_(i+3));
-        T(2,2) = rot(2,2); T(2,3) = pos.z();
+        T(0,0) = 1.0*rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
+        T(0,1) = -1.0*rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
+        T(0,2) = 1.0*rot(0,2); T(0,3) = 1.0*pos.x();
+        T(1,0) = 1.0*rot(1,0)*cos(x_(i+3))+rot(1,1)*sin(x_(i+3));
+        T(1,1) = -1.0*rot(1,0)*sin(x_(i+3))+rot(1,1)*cos(x_(i+3));
+        T(1,2) = 1.0*rot(1,2); T(1,3) = 1.0*pos.y();
+        T(2,0) = 1.0*rot(2,0)*cos(x_(i+3))+rot(2,1)*sin(x_(i+3));
+        T(2,1) = -1.0*rot(2,0)*sin(x_(i+3))+rot(2,1)*cos(x_(i+3));
+        T(2,2) = 1.0*rot(2,2); T(2,3) = 1.0*pos.z();
         T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
 
         T_BVH p;
@@ -462,7 +462,11 @@ void CobNonlinearMPC::odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
 
     temp(0) = msg->pose.pose.position.x;
     temp(1) = msg->pose.pose.position.y;
-    temp(2) = msg->pose.pose.orientation.z;
+    double ysqr = msg->pose.pose.orientation.y * msg->pose.pose.orientation.y;
+    double t3 = +2.0 * (msg->pose.pose.orientation.w * msg->pose.pose.orientation.z + msg->pose.pose.orientation.x * msg->pose.pose.orientation.y);
+    double t4 = +1.0 - 2.0 * (ysqr + msg->pose.pose.orientation.z * msg->pose.pose.orientation.z);
+
+    temp(2) = std::atan2(t3, t4);
 
     odometry_state_ = temp;
 }
@@ -827,6 +831,26 @@ Eigen::MatrixXd CobNonlinearMPC::mpc_step(const geometry_msgs::Pose pose,
 //
 //        visualizeBVH(point, min_dist, i);
 //    }
+
+    Function fk_test = Function("fk_", {x_}, {p_c});
+
+        vector<double> state_vec;
+        for(int i = 0; i < state.rows(); i++)
+        {
+            state_vec.push_back((double)state.data(i));
+        }
+        sx_x_new = SX::vertcat({state_vec});
+        SX state_v = SX::vertcat({state_vec});
+
+        SX test_v = fk_test(sx_x_new).at(0);
+
+        state_vec.clear();
+        state_vec.push_back((double)test_v(0));
+        state_vec.push_back((double)test_v(1));
+        state_vec.push_back((double)test_v(2));
+        ROS_INFO_STREAM("Joint values:" <<x_new);
+        ROS_WARN_STREAM("Goal: \n" << pose.position.x <<", " << pose.position.y << ", " << pose.position.z);
+        ROS_WARN_STREAM("Current Position: \n" << state_vec);
 
     return q_dot;
 }
