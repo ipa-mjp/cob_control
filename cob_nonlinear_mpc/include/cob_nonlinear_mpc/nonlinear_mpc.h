@@ -71,6 +71,7 @@ struct Robot
     urdf::Model urdf;
     KDL::Chain kinematic_chain;
     std::vector<KDL::Joint> joints;
+    std::vector<KDL::Frame> joint_frames;
     std::vector<KDL::Segment> forward_kinematics;
     bool base_active_;
 };

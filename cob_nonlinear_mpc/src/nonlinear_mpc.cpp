@@ -96,6 +96,7 @@ void MPC::set_input_constraints(vector<double> input_constraints_min,vector<doub
 
 void MPC::generate_symbolic_forward_kinematics(Robot* robot){
     // Casadi symbolics
+    ROS_INFO("MPC::generate_symbolic_forward_kinematics");
     u_ = SX::sym("u", control_dim_);  // control
     x_ = SX::sym("x", state_dim_); // states
 
@@ -106,11 +107,12 @@ void MPC::generate_symbolic_forward_kinematics(Robot* robot){
         T(1,0) = sin(x_(2)); T(1,1) = cos(x_(2));   T(1,2) = 0.0; T(1,3) = x_(1);
         T(2,0) = 0.0;        T(2,1) = 0.0;          T(2,2) = 1.0; T(2,3) = 0;
         T(3,0) = 0.0;        T(3,1) = 0.0;          T(3,2) = 0.0; T(3,3) = 1.0;
-        fk_base_ = T; //Base forward kinematics
+        fk_base_ = T; //
+        ROS_INFO("Base forward kinematics");
     }
     int offset;
 
-    for(int i=0;i<robot->kinematic_chain.getNrOfSegments();i++){
+    for(int i=0;i<robot->joint_frames.size();i++){
 
         KDL::Vector pos;
         KDL::Rotation rot;
@@ -123,6 +125,7 @@ void MPC::generate_symbolic_forward_kinematics(Robot* robot){
         if(robot->base_active_){ // if base active first initial control variable belong to the base
         // here each joint is considered to be revolute.. code needs to be updated for prismatic
         //rotation matrix of the joint * homogenic transformation matrix of the next joint relative to the previous
+        //still needs to be improved... if the chain is composed by joint than not joint than joint again this is going to be wrong
             T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
             T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
             T(0,2) = rot(0,2); T(0,3) = pos.x();
@@ -590,6 +593,7 @@ void MPC::visualizeBVH(const geometry_msgs::Point point, double radius, int id)
 
 void MPC::generate_bounding_volumes(Robot* robot){
     // Get bounding volume forward kinematics
+    ROS_INFO("MPC::generate_bounding_volumes");
         for(int i=0; i<transform_vec_bvh_.size(); i++)
         {
             T_BVH bvh = transform_vec_bvh_.at(i);

@@ -82,6 +82,7 @@ bool CobNonlinearMPC::process_KDL_tree(){
 
     KDL::Frame F;
     double roll,pitch,yaw;
+    ROS_INFO_STREAM("robot_.kinematic_chain.getNrOfSegments():"<<robot_.kinematic_chain.getNrOfSegments());
     for (uint16_t i = 0; i < robot_.kinematic_chain.getNrOfSegments(); i++)
     {
         robot_.joints.push_back(robot_.kinematic_chain.getSegment(i).getJoint());
@@ -105,7 +106,6 @@ bool CobNonlinearMPC::process_KDL_tree(){
         }
 #endif
 
-        std::vector<KDL::Segment> joint_frames;
         for (uint16_t i = 0; i < robot_.kinematic_chain.getNrOfSegments(); i++)
         {
             if(robot_.joints.at(i).getType()==8)//fixed joint
@@ -135,20 +135,18 @@ bool CobNonlinearMPC::process_KDL_tree(){
             }
             if(robot_.joints.at(i).getType()==0) //revolute joint
             {
-
-                KDL::Frame f = robot_.forward_kinematics.at(i-1).getFrameToTip()*robot_.kinematic_chain.getSegment(i).getFrameToTip();
-                KDL::Segment link(robot_.kinematic_chain.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
-                robot_.forward_kinematics.push_back(link);
-                if(i==0)//First joint
+                if(robot_.joint_frames.size()==0)
                 {
                     KDL::Segment link(robot_.kinematic_chain.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),robot_.kinematic_chain.getSegment(i).getFrameToTip(),KDL::RigidBodyInertia::Zero());
                     robot_.forward_kinematics.push_back(link);
+                    robot_.joint_frames.push_back(robot_.kinematic_chain.getSegment(i).getFrameToTip());
                 }
                 else
                 {
                     KDL::Frame f = robot_.forward_kinematics.at(i-1).getFrameToTip()*robot_.kinematic_chain.getSegment(i).getFrameToTip();
                     KDL::Segment link(robot_.kinematic_chain.getSegment(i).getName(),KDL::Joint(KDL::Joint::None),f,KDL::RigidBodyInertia::Zero());
                     robot_.forward_kinematics.push_back(link);
+                    robot_.joint_frames.push_back(robot_.kinematic_chain.getSegment(i).getFrameToTip());
                     // joint_frames its the same as chain_.getSegment(i).getFrameToTip() which is not in the robot variable
                     // in this case robot_.kinematic_chain.getSegment(i).getFrameToTip()
 
