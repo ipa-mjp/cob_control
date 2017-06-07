@@ -239,7 +239,11 @@ void CobNonlinearMPC::odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
 
     temp(0) = msg->pose.pose.position.x;
     temp(1) = msg->pose.pose.position.y;
-    temp(2) = msg->pose.pose.orientation.z;
+    //CONVERT FROM QUATERNION TO JOINT ANGLE ROTATION
+    double ysqr = msg->pose.pose.orientation.y * msg->pose.pose.orientation.y;
+    double t3 = +2.0 * (msg->pose.pose.orientation.w * msg->pose.pose.orientation.z + msg->pose.pose.orientation.x * msg->pose.pose.orientation.y);
+    double t4 = +1.0 - 2.0 * (ysqr + msg->pose.pose.orientation.z * msg->pose.pose.orientation.z);
+    temp(2) = std::atan2(t3, t4);
 
     odometry_state_ = temp;
 }
