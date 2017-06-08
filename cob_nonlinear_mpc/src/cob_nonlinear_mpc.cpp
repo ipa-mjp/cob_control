@@ -148,13 +148,31 @@ bool CobNonlinearMPC::initialize()
         return false;
     }
 
+    if (!nh_.getParam("self_collision_matrix", scm_))
+    {
+        ROS_ERROR("Parameter 'self_collision_matrix' not set");
+        //return false;
+    }
+
+    for (XmlRpc::XmlRpcValue::iterator it = scm_.begin(); it != scm_.end(); ++it)
+    {
+        std::vector<std::string> empty_vec;
+        this->robot_.self_collision_map_[it->first] = empty_vec;
+        ROS_ASSERT(it->second.getType() == XmlRpc::XmlRpcValue::TypeArray);
+        for (int j=0; j < it->second.size(); ++j)
+        {
+            ROS_ASSERT(it->second[j].getType() == XmlRpc::XmlRpcValue::TypeString);
+            this->robot_.self_collision_map_[it->first].push_back(it->second[j]);
+        }
+    }
+
     this->process_KDL_tree();
 
     mpc_ctr_->init();
 
     mpc_ctr_->generate_symbolic_forward_kinematics(&robot_);
 
-    mpc_ctr_->generate_bounding_volumes(&robot_);
+    mpc_ctr_->BV.generate_bounding_volumes(&robot_);
 
     joint_state_ = KDL::JntArray(robot_.kinematic_chain.getNrOfJoints());
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
@@ -251,20 +269,30 @@ void CobNonlinearMPC::odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
 
 KDL::JntArray CobNonlinearMPC::getJointState()
 {
-    KDL:: JntArray tmp(joint_state_.rows() + odometry_state_.rows());
+    KDL:: JntArray state(joint_state_.rows() + odometry_state_.rows());
 //    KDL:: JntArray tmp(joint_state_.rows());
 
-    ROS_INFO("STATE SIZE: %i Odometry State SIze %i", tmp.rows(), odometry_state_.rows());
+    ROS_INFO("STATE SIZE: %i Odometry State SIze %i", state.rows(), odometry_state_.rows());
 
     for(int i = 0; i < odometry_state_.rows(); i++)
     {
-        tmp(i) = odometry_state_(i);
+        state(i) = odometry_state_(i);
     }
 
     for(int i = 0 ; i < joint_state_.rows(); i++)
     {
-        tmp(i+odometry_state_.rows()) = this->joint_state_(i);
+        state(i+odometry_state_.rows()) = this->joint_state_(i);
     }
 
-    return tmp;
+    ROS_INFO("Bounds and initial guess for the state");
+
+    ROS_INFO_STREAM("state rows: " <<state.rows());
+    for(unsigned int i=0; i < state.rows();i++)
+    {
+        mpc_ctr_->x0_min.push_back(state(i));
+        mpc_ctr_->x0_max.push_back(state(i));
+        mpc_ctr_->x_init.push_back(state(i));
+    }
+
+    return state;
 }

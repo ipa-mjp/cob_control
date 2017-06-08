@@ -54,10 +54,20 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/shared_ptr.hpp>
 
+#include <cob_nonlinear_mpc/robot.h>
+
 using namespace casadi;
 using namespace std;
 
-class T_BVH
+struct T_BVH
+{
+    SX T;
+    SX BVH_p;
+    string link;
+    bool constraint = false;
+};
+
+class BoundingVolume
 {
 private:
 
@@ -67,6 +77,12 @@ private:
     string link;
     bool constraint = false;
 
+public:
+    BoundingVolume(string topic)
+    {
+        //marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(topic, 1);
+    }
+    ~BoundingVolume(){}
     //Bounding volumes
     std::vector<SX> bvh_points_;
     std::vector<T_BVH> transform_vec_bvh_;
@@ -74,7 +90,6 @@ private:
 
     std::map<string,vector<vector<SX>>> bvh_matrix;
 
-    XmlRpc::XmlRpcValue scm_;
     XmlRpc::XmlRpcValue bvb_;
 
     vector<double> bvb_positions_;
@@ -84,18 +99,9 @@ private:
 
     visualization_msgs::MarkerArray marker_array_;
 
-    std::unordered_map<std::string, std::vector<std::string> > self_collision_map_;
-
-public:
-    T_BVH(string topic)
-    {
-        marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(topic, 1);
-    }
-    ~T_BVH(){}
-
     void visualizeBVH(const geometry_msgs::Point point, double radius, int id);
 
-    void generate_bounding_volumes();
+    void generate_bounding_volumes(Robot* robot);
 };
 
 #endif  // BOUNDING_VOLUME_H

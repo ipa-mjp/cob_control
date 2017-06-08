@@ -1,6 +1,6 @@
 #include <cob_nonlinear_mpc/bounding_volumes.h>
 
-void T_BVH::visualizeBVH(const geometry_msgs::Point point, double radius, int id)
+void BoundingVolume::visualizeBVH(const geometry_msgs::Point point, double radius, int id)
 {
     visualization_msgs::Marker marker;
     marker.type = visualization_msgs::Marker::SPHERE;
@@ -30,9 +30,9 @@ void T_BVH::visualizeBVH(const geometry_msgs::Point point, double radius, int id
     marker_pub_.publish(marker_array_);
 }
 
-void T_BVH::generate_bounding_volumes(){
+void BoundingVolume::generate_bounding_volumes(Robot* robot){
     // Get bounding volume forward kinematics
-        for(int i=0; i<transform_vec_bvh_.size(); i++)
+    /*    for(int i=0; i<transform_vec_bvh_.size(); i++)
         {
             T_BVH bvh = transform_vec_bvh_.at(i);
             std::vector<SX> bvh_arm;
@@ -82,5 +82,5 @@ void T_BVH::generate_bounding_volumes(){
                 bvh_matrix["body"].push_back(base_bvh);
             }
 
-        }
+        }*/
 }

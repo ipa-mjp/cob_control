@@ -81,7 +81,6 @@ private:
 
 //    std::vector<vector<SX>> bvh_matrix;
 
-    SX p_;
     tf::TransformListener tf_listener_;
 
     ros::Subscriber jointstate_sub_;
@@ -96,8 +95,7 @@ private:
     KDL::JntArray odometry_state_;
     KDL::Tree robot_tree_;
 
-    T_BVH bouding_volume_;
-
+    XmlRpc::XmlRpcValue scm_;
 public:
     CobNonlinearMPC()
     {
