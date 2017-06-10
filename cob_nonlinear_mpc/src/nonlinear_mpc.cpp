@@ -197,6 +197,7 @@ void MPC::generate_symbolic_forward_kinematics(Robot* robot){
     xf_max = this->state_terminal_constraints_max_;
 
     weiting.resize(control_dim_,1);
+#ifdef __DEBUG__
     ROS_INFO("ROBOT MASSES");
     for(int i=0;i<robot->forward_kinematics.size();i++){
         ROS_INFO_STREAM("Segment " <<robot->forward_kinematics.at(i).getName());
@@ -205,7 +206,7 @@ void MPC::generate_symbolic_forward_kinematics(Robot* robot){
         ROS_INFO_STREAM(" z:" <<robot->forward_kinematics.at(i).getFrameToTip().p.z());
         ROS_INFO_STREAM(" Mass:" <<robot->kinematic_chain.getSegment(i).getInertia().getMass());
     }
-
+#endif
     if(robot->base_active_){
         for(int i=0;i<3;i++){
             weiting.at(i)=robot->kinematic_chain.getSegment(0).getInertia().getMass();
@@ -235,6 +236,7 @@ void MPC::generate_symbolic_forward_kinematics(Robot* robot){
             weiting.at(i)=masses.at(i);
         }
     }
+    R = SX::sym("R",control_dim_,control_dim_);
 
 }
 
@@ -255,17 +257,16 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
 
     q_c = SX::vertcat({ //current quaternion
         0.5 * sqrt(fk_(0,0) + fk_(1,1) + fk_(2,2) + 1.0),
-        0.5 * ((fk_(2,1) - fk_(1,2))) * sqrt(fk_(0,0) - fk_(1,1) - fk_(2,2) + 1.0),
-        0.5 * ((fk_(0,2) - fk_(2,0))) * sqrt(fk_(1,1) - fk_(2,2) - fk_(0,0) + 1.0),
-        0.5 * ((fk_(1,0) - fk_(0,1))) * sqrt(fk_(2,2) - fk_(0,0) - fk_(1,1) + 1.0)
+        0.5 * ((fk_(2,1) - fk_(1,2))) / sqrt(fk_(0,0) + fk_(1,1) + fk_(2,2) + 1.0),
+        0.5 * ((fk_(0,2) - fk_(2,0))) / sqrt(fk_(1,1) + fk_(2,2) + fk_(0,0) + 1.0),
+        0.5 * ((fk_(1,0) - fk_(0,1))) / sqrt(fk_(2,2) + fk_(0,0) + fk_(1,1) + 1.0)
     });
 
     pos_c = SX::vertcat({fk_(0,3), fk_(1,3), fk_(2,3)}); //current state
-
     //ROS_INFO("Desired Goal-pose");
     pos_target = SX::vertcat({pose.position.x, pose.position.y, pose.position.z});
     q_target = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
-
+    q_target.print(std::cout);
     // Prevent collision with Base_link
     SX barrier;
     SX dist;
@@ -322,31 +323,33 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     SX q_c_inverse = SX::vertcat({q_c(0), -q_c(1), -q_c(2), -q_c(3)});
     SX e_quat= quaternion_product(q_c_inverse,q_target);
     SX error_attitute = SX::vertcat({ e_quat(1), e_quat(2), e_quat(3)});
-    error_attitute.print(std::cout);
-    ROS_INFO("L2 norm of the control signal");
-
-    SX R = SX::sym("R",control_dim_,control_dim_);
-    for(int i=0; i<weiting.size();i++){
-        for(int j=0; j<weiting.size();j++){
-            R(i,j)=0.0;
-        }
-        R(i,i)=weiting.at(i);
+    SX q = SX::vertcat({e_quat(0), e_quat(1), e_quat(2),e_quat(3)});
+    Function qk = Function("e_quat", {x_}, {q});
+    vector<double> x;
+    for(unsigned int i=0; i < state.rows();i++)
+    {
+        x.push_back(state(i));
     }
-    R.print(std::cout);
+    SX test_v = qk(SX::vertcat({x})).at(0);
+
+    //ROS_INFO("L2 norm of the control signal");
+    ROS_INFO_STREAM("ATTITUDE ERROR: " << (double)test_v(0) <<" " << (double)test_v(1) <<" "<< (double)test_v(2) <<" "<< (double)test_v(3));
+    this->acceleration_coordination(state);
+    //R.print(std::cout);
     SX u2 = SX::mtimes(R,u_);
-    u2.print(std::cout);
+    //u2.print(std::cout);
     SX energy = SX::dot(u_,u2);
-    energy.print(std::cout);
-    ROS_INFO("L2 norm of the states");
+    //energy.print(std::cout);
+    //ROS_INFO("L2 norm of the states");
     std::vector<int> state_convariance(state_dim_,1);
     SX S = 0.01*SX(state_convariance);
     SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
 
-    ROS_INFO_STREAM("STATE COVARIANCE: "<< S);
+    //ROS_INFO_STREAM("STATE COVARIANCE: "<< S);
     //ROS_INFO("Objective");
     SX error=pos_c-pos_target;
 
-    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy + 10 * dot(error_attitute,error_attitute);// + barrier;
+    SX L = 10 * dot(error_attitute,error_attitute);// dot(pos_c-pos_target,pos_c-pos_target) + + barrier;
 
     //ROS_INFO("Create Euler integrator function");
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -535,15 +538,21 @@ int MPC::init_shooting_node(){
     x_init.clear();
     return offset += state_dim_;
 }
+void MPC::acceleration_coordination(const KDL::JntArray& state){
+    for(int i=0; i<weiting.size();i++){
+        for(int j=0; j<weiting.size();j++){
+            R(i,j)=0.0;
+        }
+        R(i,i)=weiting.at(i);
+    }
+}
 
 KDL::Frame MPC::forward_kinematics(const KDL::JntArray& state){
 
     KDL::Frame ef_pos; //POsition of the end effector
 
-    //SX p_base = SX::vertcat({fk_base_(0,3), fk_base_(1,3), fk_base_(2,3)});
-
     Function fk = Function("fk_", {x_}, {pos_c});
-    //Function fk_base = Function("fk_base_", {x_}, {p_base});
+
     vector<double> x;
     for(unsigned int i=0; i < state.rows();i++)
     {
@@ -568,15 +577,6 @@ Function MPC::create_integrator(const unsigned int state_dim, const unsigned int
     double dt = T/((double)N);
 
     Function f = Function("f", {x, u}, {ode, L});
-//
-//    f.generate("f");
-//
-//    // Compile the C-code to a shared library
-//    string compile_command = "gcc -fPIC -shared -O3 f.c -o f.so";
-//    int flag = system(compile_command.c_str());
-//    casadi_assert_message(flag==0, "Compilation failed");
-//
-//    Function f_ext = external("f");
 
     MX X0 = MX::sym("X0", state_dim);
     MX U_ = MX::sym("U",control_dim);

@@ -130,6 +130,7 @@ public:
 
     //Bounding volumes
     BoundingVolume BV;
+    SX R ;
 
     void init();
 
@@ -161,6 +162,8 @@ public:
                                const unsigned int N, SX ode, SX x, SX u, SX L);
 
     int init_shooting_node();
+
+    void acceleration_coordination(const KDL::JntArray& state);
 };
 
 #endif  // NONLINEAR_MPC_H
