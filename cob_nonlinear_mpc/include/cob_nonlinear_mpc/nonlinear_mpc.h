@@ -56,6 +56,8 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/shared_ptr.hpp>
 
+#include <Eigen/Core>
+
 using namespace casadi;
 using namespace std;
 
@@ -103,6 +105,9 @@ private:
     vector<double> x_new; //new state after computation
 
     ros::NodeHandle nh_;
+
+    //COORDINATION
+    std::vector<double> weiting;
 
 public:
     MPC(int num_shooting_nodes,double time_horizon ,int state_dim,int control_dim): BV("nmpc/bvh")

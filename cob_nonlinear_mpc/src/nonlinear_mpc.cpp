@@ -195,6 +195,47 @@ void MPC::generate_symbolic_forward_kinematics(Robot* robot){
     x_max  = this->state_path_constraints_max_;
     xf_min = this->state_terminal_constraints_min_;
     xf_max = this->state_terminal_constraints_max_;
+
+    weiting.resize(control_dim_,1);
+    ROS_INFO("ROBOT MASSES");
+    for(int i=0;i<robot->forward_kinematics.size();i++){
+        ROS_INFO_STREAM("Segment " <<robot->forward_kinematics.at(i).getName());
+        ROS_INFO_STREAM("\n Segment x: " <<robot->forward_kinematics.at(i).getFrameToTip().p.x());
+        ROS_INFO_STREAM(" y:" <<robot->forward_kinematics.at(i).getFrameToTip().p.y());
+        ROS_INFO_STREAM(" z:" <<robot->forward_kinematics.at(i).getFrameToTip().p.z());
+        ROS_INFO_STREAM(" Mass:" <<robot->kinematic_chain.getSegment(i).getInertia().getMass());
+    }
+
+    if(robot->base_active_){
+        for(int i=0;i<3;i++){
+            weiting.at(i)=robot->kinematic_chain.getSegment(0).getInertia().getMass();
+        }
+        vector<double> masses;
+        for(int i=0;i<robot->forward_kinematics.size();i++){
+            if(robot->kinematic_chain.getSegment(i).getJoint().getType()==0){
+                masses.push_back(robot->kinematic_chain.getSegment(i).getInertia().getMass());
+                ROS_INFO("JOINT MASSES: %f", robot->kinematic_chain.getSegment(i).getInertia().getMass());
+            }
+        }
+
+        for(int i=3;i<control_dim_;i++){
+            weiting.at(i)=masses.at(i-3);
+        }
+    }
+    else{
+        vector<double> masses;
+        for(int i=0;i<robot->forward_kinematics.size();i++){
+            if(robot->kinematic_chain.getSegment(i).getJoint().getType()==0){
+                masses.push_back(robot->kinematic_chain.getSegment(i).getInertia().getMass());
+                ROS_INFO("JOINT MASSES: %f", robot->kinematic_chain.getSegment(i).getInertia().getMass());
+            }
+        }
+
+        for(int i=0;i<control_dim_;i++){
+            weiting.at(i)=masses.at(i);
+        }
+    }
+
 }
 
 
@@ -281,16 +322,27 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     SX q_c_inverse = SX::vertcat({q_c(0), -q_c(1), -q_c(2), -q_c(3)});
     SX e_quat= quaternion_product(q_c_inverse,q_target);
     SX error_attitute = SX::vertcat({ e_quat(1), e_quat(2), e_quat(3)});
+    error_attitute.print(std::cout);
+    ROS_INFO("L2 norm of the control signal");
 
-    // L2 norm of the control signal
-    SX R = SX::scalar_matrix(control_dim_,1,1);;
-    SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
-
-    // L2 norm of the states
+    SX R = SX::sym("R",control_dim_,control_dim_);
+    for(int i=0; i<weiting.size();i++){
+        for(int j=0; j<weiting.size();j++){
+            R(i,j)=0.0;
+        }
+        R(i,i)=weiting.at(i);
+    }
+    R.print(std::cout);
+    SX u2 = SX::mtimes(R,u_);
+    u2.print(std::cout);
+    SX energy = SX::dot(u_,u2);
+    energy.print(std::cout);
+    ROS_INFO("L2 norm of the states");
     std::vector<int> state_convariance(state_dim_,1);
-    SX S = 0.01*SX::scalar_matrix(state_dim_,1,1);
+    SX S = 0.01*SX(state_convariance);
     SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
 
+    ROS_INFO_STREAM("STATE COVARIANCE: "<< S);
     //ROS_INFO("Objective");
     SX error=pos_c-pos_target;
 
@@ -344,15 +396,15 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
 
     std::map<std::string, DM> arg, res;
 
-    ROS_INFO("Bounds and initial guess");
+    //ROS_INFO("Bounds and initial guess");
     arg["lbx"] = min_state;
     arg["ubx"] = max_state;
     arg["lbg"] = 0;
     arg["ubg"] = 0;
     arg["x0"] = init_state;
-    ROS_INFO_STREAM("INIT STATE DIM:" << init_state.size());
+    /*ROS_INFO_STREAM("INIT STATE DIM:" << init_state.size());
     ROS_INFO_STREAM("min INIT STATE DIM:" << min_state.size());
-    ROS_INFO_STREAM("max STATE DIM:" << max_state.size());
+    ROS_INFO_STREAM("max STATE DIM:" << max_state.size());*/
     ROS_INFO("Solve the problem");
     res = solver(arg);
 
@@ -499,7 +551,6 @@ KDL::Frame MPC::forward_kinematics(const KDL::JntArray& state){
     }
     SX test_v = fk(SX::vertcat({x})).at(0);
     //SX test_base = fk_base(SX::vertcat({x_new})).at(0);
-
     ef_pos.p.x((double)test_v(0));
     ef_pos.p.y((double)test_v(1));
     ef_pos.p.z((double)test_v(2));
