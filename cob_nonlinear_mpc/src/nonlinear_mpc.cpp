@@ -349,7 +349,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     //ROS_INFO("Objective");
     SX error=pos_c-pos_target;
 
-    SX L = 10 * dot(error_attitute,error_attitute);// dot(pos_c-pos_target,pos_c-pos_target) + + barrier;
+    SX L = 10 * dot(error_attitute,error_attitute) + dot(pos_c-pos_target,pos_c-pos_target) ;//+ barrier;
 
     //ROS_INFO("Create Euler integrator function");
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
