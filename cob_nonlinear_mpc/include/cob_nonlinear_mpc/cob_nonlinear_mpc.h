@@ -67,19 +67,12 @@ private:
     std::vector<std::string> transformation_names_base_;
     std::vector<std::string> joint_names;
 
-
     std::string chain_base_link_;
     std::string chain_tip_link_;
 
     Robot robot_;
 
-    double min_dist;
-
     boost::shared_ptr<MPC> mpc_ctr_;
-
-    std::vector<SX> transformation_vector_dual_quat_;
-
-//    std::vector<vector<SX>> bvh_matrix;
 
     tf::TransformListener tf_listener_;
 
@@ -94,6 +87,8 @@ private:
     KDL::JntArray joint_state_;
     KDL::JntArray odometry_state_;
     KDL::Tree robot_tree_;
+
+    double min_dist;
 
     XmlRpc::XmlRpcValue scm_;
 public:

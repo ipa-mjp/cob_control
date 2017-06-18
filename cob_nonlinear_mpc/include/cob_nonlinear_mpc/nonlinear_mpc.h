@@ -93,7 +93,6 @@ private:
     SX fk_base_; //Base Forward kinematics
     std::vector<SX> fk_vector_; // Forward kinematics for each link
 
-    // State at each shooting node and control for each shooting interval
     // Declare variable vector for the NLP
     MX V ;
     vector<MX> X, U;
@@ -123,9 +122,6 @@ public:
     vector<double> x0_max;
     vector<double> x_init;
 
-    //Bounding volumes
-    BoundingVolume BV;
-
     void init();
 
     int get_num_shooting_nodes();
@@ -142,15 +138,11 @@ public:
 
     void set_input_constraints(vector<double> input_constraints_min,vector<double> input_constraints_max);
 
-    void generate_symbolic_forward_kinematics(Robot* robot);
-
     SX quaternion_product(SX q1, SX q2);
-
-    SX dual_quaternion_product(SX q1, SX q2);
 
     KDL::Frame forward_kinematics(const KDL::JntArray& state);
 
-    Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state, Robot* robot);
+    Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state);
 
     Function create_integrator(const unsigned int state_dim, const unsigned int control_dim, const double T,
                                const unsigned int N, SX ode, SX x, SX u, SX L);

@@ -166,13 +166,17 @@ bool CobNonlinearMPC::initialize()
         }
     }
 
+    // Parse Robot model
     this->process_KDL_tree();
 
+    // Calculate symbolic forward kinematics
+    ForwardKinematics fk;
+    fk.generate_symbolic_forward_kinematics(robot_, mpc_ctr_->get_control_dim(), mpc_ctr_->get_state_dim());
+
+    // MPC stuff
     mpc_ctr_->init();
 
-    mpc_ctr_->generate_symbolic_forward_kinematics(&robot_);
-
-    mpc_ctr_->BV.generate_bounding_volumes(&robot_);
+    mpc_ctr_->BV.generate_bounding_volumes(robot_);
 
     joint_state_ = KDL::JntArray(robot_.kinematic_chain.getNrOfJoints());
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
@@ -194,12 +198,13 @@ void CobNonlinearMPC::FrameTrackerCallback(const geometry_msgs::Pose::ConstPtr& 
 {
     KDL::JntArray state = getJointState();
 
-    Eigen::MatrixXd qdot = mpc_ctr_->mpc_step(*msg, state,&robot_);
+    Eigen::MatrixXd qdot = mpc_ctr_->mpc_step(*msg, state);
 
     geometry_msgs::Twist base_vel_msg;
     std_msgs::Float64MultiArray vel_msg;
 
-    if(robot_.base_active_){
+    if(robot_.base_active_)
+    {
         base_vel_msg.linear.x = qdot(0);
         base_vel_msg.linear.y = qdot(1);
         base_vel_msg.linear.z = 0;
@@ -228,7 +233,6 @@ void CobNonlinearMPC::FrameTrackerCallback(const geometry_msgs::Pose::ConstPtr& 
 
 void CobNonlinearMPC::jointstateCallback(const sensor_msgs::JointState::ConstPtr& msg)
 {
-
     KDL::JntArray q_temp = joint_state_;
 
     int count = 0;
@@ -239,7 +243,6 @@ void CobNonlinearMPC::jointstateCallback(const sensor_msgs::JointState::ConstPtr
         {
             if (strcmp(msg->name[i].c_str(), joint_names[j].c_str()) == 0)
             {
-
                 q_temp(j) = msg->position[i];
                 count++;
                 break;
@@ -270,9 +273,6 @@ void CobNonlinearMPC::odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
 KDL::JntArray CobNonlinearMPC::getJointState()
 {
     KDL:: JntArray state(joint_state_.rows() + odometry_state_.rows());
-//    KDL:: JntArray tmp(joint_state_.rows());
-
-    ROS_INFO("STATE SIZE: %i Odometry State SIze %i", state.rows(), odometry_state_.rows());
 
     for(int i = 0; i < odometry_state_.rows(); i++)
     {
@@ -284,9 +284,6 @@ KDL::JntArray CobNonlinearMPC::getJointState()
         state(i+odometry_state_.rows()) = this->joint_state_(i);
     }
 
-    ROS_INFO("Bounds and initial guess for the state");
-
-    ROS_INFO_STREAM("state rows: " <<state.rows());
     for(unsigned int i=0; i < state.rows();i++)
     {
         mpc_ctr_->x0_min.push_back(state(i));
