@@ -88,8 +88,6 @@ public:
     std::vector<T_BVH> transform_vec_bvh_;
     std::vector<SX> transform_base_vec_;
 
-    std::map<string,vector<vector<SX>>> bvh_matrix;
-
     XmlRpc::XmlRpcValue bvb_;
 
     vector<double> bvb_positions_;
@@ -101,7 +99,7 @@ public:
 
     void visualizeBVH(const geometry_msgs::Point point, double radius, int id);
 
-    void generate_bounding_volumes(Robot* robot);
+    std::map<string,vector<vector<SX>>> generate_bounding_volumes(Robot &robot, ForwardKinematics &fk);
 };
 
 #endif  // BOUNDING_VOLUME_H

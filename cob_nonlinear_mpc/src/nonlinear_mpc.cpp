@@ -93,99 +93,9 @@ void MPC::set_state_constraints(vector<double> state_terminal_constraints_min,ve
 void MPC::set_input_constraints(vector<double> input_constraints_min,vector<double> input_constraints_max){
     this->input_constraints_min_=input_constraints_min;
     this->input_constraints_max_=input_constraints_max;
-}
 
-void MPC::generate_symbolic_forward_kinematics(Robot* robot){
-    // Casadi symbolics
-    ROS_INFO("MPC::generate_symbolic_forward_kinematics");
-    u_ = SX::sym("u", control_dim_);  // control
-    x_ = SX::sym("x", state_dim_); // states
 
-    SX T = SX::sym("T",4,4);
-    if(robot->base_active_){
-    ////generic rotation matrix around z and translation vector for x and y
-        T(0,0) = cos(x_(2)); T(0,1) = -sin(x_(2));  T(0,2) = 0.0; T(0,3) = x_(0);
-        T(1,0) = sin(x_(2)); T(1,1) = cos(x_(2));   T(1,2) = 0.0; T(1,3) = x_(1);
-        T(2,0) = 0.0;        T(2,1) = 0.0;          T(2,2) = 1.0; T(2,3) = 0;
-        T(3,0) = 0.0;        T(3,1) = 0.0;          T(3,2) = 0.0; T(3,3) = 1.0;
-        fk_base_ = T; //
-        ROS_INFO("Base forward kinematics");
-    }
-    int offset;
-
-    for(int i=0;i<robot->joint_frames.size();i++){
-
-        KDL::Vector pos;
-        KDL::Rotation rot;
-        rot=robot->joint_frames.at(i).M;
-        pos=robot->joint_frames.at(i).p;
-#ifdef __DEBUG__
-        ROS_WARN("Rotation matrix %f %f %f \n %f %f %f \n %f %f %f \n",rot(0,0),rot(0,1),rot(0,2),rot(1,0),rot(1,1),rot(1,2),rot(2,0),rot(2,1),rot(2,2));
-        ROS_INFO_STREAM("Joint position of transformation"<< " X: " << pos.x()<< " Y: " << pos.y()<< " Z: " << pos.z());
-#endif
-        if(robot->base_active_){ // if base active first initial control variable belong to the base
-        // here each joint is considered to be revolute.. code needs to be updated for prismatic
-        //rotation matrix of the joint * homogenic transformation matrix of the next joint relative to the previous
-        //still needs to be improved... if the chain is composed by joint than not joint than joint again this is going to be wrong
-            T(0,0) = rot(0,0)*cos(x_(i+3))+rot(0,1)*sin(x_(i+3));
-            T(0,1) = -rot(0,0)*sin(x_(i+3))+rot(0,1)*cos(x_(i+3));
-            T(0,2) = rot(0,2); T(0,3) = pos.x();
-            T(1,0) = rot(1,0)*cos(x_(i+3))+rot(1,1)*sin(x_(i+3));
-            T(1,1) = -rot(1,0)*sin(x_(i+3))+rot(1,1)*cos(x_(i+3));
-            T(1,2) = rot(1,2); T(1,3) = pos.y();
-            T(2,0) = rot(2,0)*cos(x_(i+3))+rot(2,1)*sin(x_(i+3));
-            T(2,1) = -rot(2,0)*sin(x_(i+3))+rot(2,1)*cos(x_(i+3));
-            T(2,2) = rot(2,2); T(2,3) = pos.z();
-            T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
-        }
-        else{
-            T(0,0) = rot(0,0)*cos(x_(i))+rot(0,1)*sin(x_(i));
-            T(0,1) = -rot(0,0)*sin(x_(i))+rot(0,1)*cos(x_(i));
-            T(0,2) = rot(0,2); T(0,3) = pos.x();
-            T(1,0) = rot(1,0)*cos(x_(i))+rot(1,1)*sin(x_(i));
-            T(1,1) = -rot(1,0)*sin(x_(i))+rot(1,1)*cos(x_(i));
-            T(1,2) = rot(1,2); T(1,3) = pos.y();
-            T(2,0) = rot(2,0)*cos(x_(i))+rot(2,1)*sin(x_(i));
-            T(2,1) = -rot(2,0)*sin(x_(i))+rot(2,1)*cos(x_(i));
-            T(2,2) = rot(2,2); T(2,3) = pos.z();
-            T(3,0) = 0.0; T(3,1) = 0.0; T(3,2) = 0.0; T(3,3) = 1.0;
-        }
-
-        T_BVH p;
-        p.link = robot->kinematic_chain.getSegment(i).getName();
-        p.T = T;
-        this->BV.transform_vec_bvh_.push_back(p);
-    }
-
-    // Get Endeffector FK
-    for(int i=0; i< this->BV.transform_vec_bvh_.size(); i++)
-    {
-        if(robot->base_active_)
-        {
-            if(i==0)
-            {
-                ROS_WARN("BASE IS ACTIVE");
-                fk_ = mtimes(fk_base_,this->BV.transform_vec_bvh_.at(i).T);
-            }
-            else
-            {
-                fk_ = mtimes(fk_,this->BV.transform_vec_bvh_.at(i).T);
-            }
-        }
-        else
-        {
-            if(i==0)
-            {
-                fk_ = this->BV.transform_vec_bvh_.at(i).T;
-            }
-            else
-            {
-                fk_ = mtimes(fk_,this->BV.transform_vec_bvh_.at(i).T);
-            }
-        }
-        fk_vector_.push_back(fk_); // stacks up multiplied transformation until link n
-    }
-
+    // ToDo
     u_min =  this->input_constraints_min_;
     u_max  = this->input_constraints_max_;
 
@@ -195,53 +105,9 @@ void MPC::generate_symbolic_forward_kinematics(Robot* robot){
     x_max  = this->state_path_constraints_max_;
     xf_min = this->state_terminal_constraints_min_;
     xf_max = this->state_terminal_constraints_max_;
-
-    weiting.resize(control_dim_,1);
-#ifdef __DEBUG__
-    ROS_INFO("ROBOT MASSES");
-    for(int i=0;i<robot->forward_kinematics.size();i++){
-        ROS_INFO_STREAM("Segment " <<robot->forward_kinematics.at(i).getName());
-        ROS_INFO_STREAM("\n Segment x: " <<robot->forward_kinematics.at(i).getFrameToTip().p.x());
-        ROS_INFO_STREAM(" y:" <<robot->forward_kinematics.at(i).getFrameToTip().p.y());
-        ROS_INFO_STREAM(" z:" <<robot->forward_kinematics.at(i).getFrameToTip().p.z());
-        ROS_INFO_STREAM(" Mass:" <<robot->kinematic_chain.getSegment(i).getInertia().getMass());
-    }
-#endif
-    if(robot->base_active_){
-        for(int i=0;i<3;i++){
-            weiting.at(i)=robot->kinematic_chain.getSegment(0).getInertia().getMass();
-        }
-        vector<double> masses;
-        for(int i=0;i<robot->forward_kinematics.size();i++){
-            if(robot->kinematic_chain.getSegment(i).getJoint().getType()==0){
-                masses.push_back(robot->kinematic_chain.getSegment(i).getInertia().getMass());
-                ROS_INFO("JOINT MASSES: %f", robot->kinematic_chain.getSegment(i).getInertia().getMass());
-            }
-        }
-
-        for(int i=3;i<control_dim_;i++){
-            weiting.at(i)=masses.at(i-3);
-        }
-    }
-    else{
-        vector<double> masses;
-        for(int i=0;i<robot->forward_kinematics.size();i++){
-            if(robot->kinematic_chain.getSegment(i).getJoint().getType()==0){
-                masses.push_back(robot->kinematic_chain.getSegment(i).getInertia().getMass());
-                ROS_INFO("JOINT MASSES: %f", robot->kinematic_chain.getSegment(i).getInertia().getMass());
-            }
-        }
-
-        for(int i=0;i<control_dim_;i++){
-            weiting.at(i)=masses.at(i);
-        }
-    }
-    R = SX::sym("R",control_dim_,control_dim_);
-
 }
 
-
-Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state,Robot* robot)
+Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state)
 {
 
     // Bounds and initial guess for the control
@@ -263,10 +129,11 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     });
 
     pos_c = SX::vertcat({fk_(0,3), fk_(1,3), fk_(2,3)}); //current state
+
     //ROS_INFO("Desired Goal-pose");
     pos_target = SX::vertcat({pose.position.x, pose.position.y, pose.position.z});
     q_target = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
-    q_target.print(std::cout);
+
     // Prevent collision with Base_link
     SX barrier;
     SX dist;
@@ -349,7 +216,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     //ROS_INFO("Objective");
     SX error=pos_c-pos_target;
 
-    SX L = 10 * dot(error_attitute,error_attitute) + dot(pos_c-pos_target,pos_c-pos_target) ;//+ barrier;
+    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy + 10 * dot(error_attitute,error_attitute);// + barrier;
 
     //ROS_INFO("Create Euler integrator function");
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -549,6 +416,7 @@ void MPC::acceleration_coordination(const KDL::JntArray& state){
 
 KDL::Frame MPC::forward_kinematics(const KDL::JntArray& state){
 
+
     KDL::Frame ef_pos; //POsition of the end effector
 
     Function fk = Function("fk_", {x_}, {pos_c});
@@ -594,25 +462,6 @@ Function MPC::create_integrator(const unsigned int state_dim, const unsigned int
 
     Function F = Function("F", {X0, U_}, {X_, Q}, {"x0","p"}, {"xf", "qf"});
     return F.expand("F");   // Remove overhead
-}
-
-SX MPC::dual_quaternion_product(SX q1, SX q2)
-{
-    SX q1_real = SX::vertcat({q1(0),q1(1),q1(2),q1(3)});
-    SX q1_dual = SX::vertcat({q1(4),q1(5),q1(6),q1(7)});
-    SX q2_real = SX::vertcat({q2(0),q2(1),q2(2),q2(3)});
-    SX q2_dual = SX::vertcat({q2(4),q2(5),q2(6),q2(7)});
-
-    SX q1q2_real = quaternion_product(q1_real,q2_real);
-    SX q1_real_q2_dual = quaternion_product(q1_real,q2_dual);
-    SX q1_dual_q2_real = quaternion_product(q1_dual,q2_real);
-
-    SX q_prod = SX::vertcat({
-        q1q2_real,
-        q1_real_q2_dual + q1_dual_q2_real
-    });
-
-    return q_prod;
 }
 
 SX MPC::quaternion_product(SX q1, SX q2)

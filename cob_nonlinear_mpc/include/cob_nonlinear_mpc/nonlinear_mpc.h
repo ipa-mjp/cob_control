@@ -156,7 +156,7 @@ public:
 
     KDL::Frame forward_kinematics(const KDL::JntArray& state);
 
-    Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state, Robot* robot);
+    Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state);
 
     Function create_integrator(const unsigned int state_dim, const unsigned int control_dim, const double T,
                                const unsigned int N, SX ode, SX x, SX u, SX L);
