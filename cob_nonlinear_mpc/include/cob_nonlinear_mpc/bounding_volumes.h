@@ -30,76 +30,39 @@
 #ifndef BOUNDING_VOLUME_H
 #define BOUNDING_VOLUME_H
 
-#include <ros/ros.h>
-
-#include <sensor_msgs/JointState.h>
-#include <geometry_msgs/Twist.h>
-#include <std_msgs/Float64MultiArray.h>
-#include <nav_msgs/Odometry.h>
-
-#include <urdf/model.h>
-
-#include <kdl_parser/kdl_parser.hpp>
-#include <kdl/jntarray.hpp>
-#include <kdl/jntarrayvel.hpp>
-#include <kdl/frames.hpp>
-
-#include <tf/transform_listener.h>
-#include <tf/tf.h>
-#include <visualization_msgs/MarkerArray.h>
-
-#include <ctime>
-#include <casadi/casadi.hpp>
-
-#include <boost/thread/mutex.hpp>
-#include <boost/shared_ptr.hpp>
-
-#include <cob_nonlinear_mpc/robot.h>
+#include <cob_nonlinear_mpc/cob_nonlinear_mpc.h>
+#include <cob_nonlinear_mpc/data_types.h>
 
 using namespace casadi;
 using namespace std;
-
-struct T_BVH
-{
-    SX T;
-    SX BVH_p;
-    string link;
-    bool constraint = false;
-};
 
 class BoundingVolume
 {
 private:
 
     ros::NodeHandle nh_;
-    SX T;
-    SX BVH_p;
-    string link;
-    bool constraint = false;
-
-public:
-    BoundingVolume(string topic)
-    {
-        //marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(topic, 1);
-    }
-    ~BoundingVolume(){}
-    //Bounding volumes
-    std::vector<SX> bvh_points_;
-    std::vector<T_BVH> transform_vec_bvh_;
-    std::vector<SX> transform_base_vec_;
-
-    XmlRpc::XmlRpcValue bvb_;
+    visualization_msgs::MarkerArray marker_array_;
+    std::map<string,vector<vector<SX>>> bv_mat;
 
     vector<double> bvb_positions_;
     vector<double> bvb_radius_;
 
     ros::Publisher marker_pub_;
 
-    visualization_msgs::MarkerArray marker_array_;
+public:
+    BoundingVolume()
+    {
+    }
+    ~BoundingVolume(){}
+
 
     void visualizeBVH(const geometry_msgs::Point point, double radius, int id);
 
-    std::map<string,vector<vector<SX>>> generate_bounding_volumes(Robot &robot, ForwardKinematics &fk);
+    SX getOutputConstraints(Robot &robot);
+    void generate_bounding_volumes(Robot &robot, ForwardKinematics &fk);
+
+    bool setBVBpositions(vector<double> bvb_pos);
+    bool setBVBradius(vector<double> bvb_rad);
 };
 
 #endif  // BOUNDING_VOLUME_H

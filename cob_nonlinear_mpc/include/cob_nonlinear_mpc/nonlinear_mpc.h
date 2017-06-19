@@ -47,6 +47,7 @@
 #include <tf/transform_listener.h>
 #include <tf/tf.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <cob_nonlinear_mpc/forward_kinematics.h>
 #include <cob_nonlinear_mpc/bounding_volumes.h>
 #include <cob_nonlinear_mpc/robot.h>
 
@@ -109,8 +110,11 @@ private:
     //COORDINATION
     std::vector<double> weiting;
 
+    BoundingVolume bv_;
+    ForwardKinematics _fk_;
+
 public:
-    MPC(int num_shooting_nodes,double time_horizon ,int state_dim,int control_dim): BV("nmpc/bvh")
+    MPC(int num_shooting_nodes,double time_horizon ,int state_dim,int control_dim)
     {
         num_shooting_nodes_=num_shooting_nodes;
         time_horizon_=time_horizon;
@@ -128,10 +132,8 @@ public:
     vector<double> x0_max;
     vector<double> x_init;
 
-    //Bounding volumes
-    BoundingVolume BV;
-    SX R ;
-
+    // Base function
+    Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state);
     void init();
 
     int get_num_shooting_nodes();
@@ -148,18 +150,15 @@ public:
 
     void set_input_constraints(vector<double> input_constraints_min,vector<double> input_constraints_max);
 
-    void generate_symbolic_forward_kinematics(Robot* robot);
-
     SX quaternion_product(SX q1, SX q2);
 
-    SX dual_quaternion_product(SX q1, SX q2);
-
     KDL::Frame forward_kinematics(const KDL::JntArray& state);
-
-    Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state);
-
     Function create_integrator(const unsigned int state_dim, const unsigned int control_dim, const double T,
                                const unsigned int N, SX ode, SX x, SX u, SX L);
+
+    void setBoundingVolumes(BoundingVolume &bv);
+    void setForwardKinematics(ForwardKinematics &fk);
+
 
     int init_shooting_node();
 

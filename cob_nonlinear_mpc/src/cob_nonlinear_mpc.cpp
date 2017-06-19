@@ -35,8 +35,7 @@
 
 #include <kdl_conversions/kdl_msg.h>
 #include <tf/transform_datatypes.h>
-#include <visualization_msgs/Marker.h>
-#include <visualization_msgs/MarkerArray.h>
+
 #include <cob_srvs/SetString.h>
 #include <string>
 #include <Eigen/Dense>
@@ -47,6 +46,9 @@ bool CobNonlinearMPC::initialize()
 {
     ros::NodeHandle nh_nmpc("nmpc");
     ros::NodeHandle nh_nmpc_constraints("nmpc/constraints");
+
+    ForwardKinematics fk;
+    BoundingVolume bv;
 
     // JointNames
     if (!nh_.getParam("joint_names", joint_names))
@@ -166,17 +168,59 @@ bool CobNonlinearMPC::initialize()
         }
     }
 
+    XmlRpc::XmlRpcValue bvb;
+
+    vector<double> bvb_positions, bvb_radius;
+
+    if(robot_.base_active_)
+    {
+        if (!nh_.getParam("bounding_volume_base", bvb))
+        {
+            ROS_ERROR("Parameter 'bounding_volume_base' not set");
+            return false;
+        }
+
+        for (XmlRpc::XmlRpcValue::iterator it = bvb.begin(); it != bvb.end(); ++it)
+        {
+            if(it->first == "position")
+            {
+                for (int j=0; j < it->second.size(); ++j)
+                {
+                    ROS_ASSERT(it->second[j].getType() == XmlRpc::XmlRpcValue::TypeDouble);
+                    bvb_positions.push_back(it->second[j]);
+                }
+            }
+            else if(it->first == "bv_radius")
+            {
+                for (int j=0; j < it->second.size(); ++j)
+                {
+                    ROS_ASSERT(it->second[j].getType() == XmlRpc::XmlRpcValue::TypeDouble);
+                    bvb_radius.push_back(it->second[j]);
+                }
+            }
+            else
+            {
+                ROS_ERROR("Wrong bounding volume format");
+            }
+        }
+    }
+    bv.setBVBpositions(bvb_positions);
+    bv.setBVBradius(bvb_radius);
+
     // Parse Robot model
     this->process_KDL_tree();
 
+    SX u_ = SX::sym("u", control_dim);  // control
+    SX x_ = SX::sym("x", state_dim); // states
+
     // Calculate symbolic forward kinematics
-    ForwardKinematics fk;
-    fk.generate_symbolic_forward_kinematics(robot_, mpc_ctr_->get_control_dim(), mpc_ctr_->get_state_dim());
+
+    fk.symbolic_fk(robot_, u_, x_);
+    // Bounding Volumes
+    bv.generate_bounding_volumes(robot_, fk);
 
     // MPC stuff
     mpc_ctr_->init();
-
-    mpc_ctr_->BV.generate_bounding_volumes(robot_);
 
     joint_state_ = KDL::JntArray(robot_.kinematic_chain.getNrOfJoints());
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);

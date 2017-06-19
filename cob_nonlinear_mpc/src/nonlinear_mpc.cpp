@@ -137,54 +137,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     // Prevent collision with Base_link
     SX barrier;
     SX dist;
-/*
-    std::unordered_map<std::string, std::vector<std::string> >::iterator it_scm;
 
-    int counter = 0;
-    double bv_radius;
-
-    for( it_scm = self_collision_map_.begin(); it_scm != self_collision_map_.end(); it_scm++)
-    {
-        std::vector<string> scm_collision_links = it_scm->second;
-        for(int i=0; i<scm_collision_links.size(); i++)
-        {
-            ROS_WARN_STREAM(it_scm->first);
-            vector<vector<SX>> p1_mat = bvh_matrix[it_scm->first];
-            vector<vector<SX>> p2_mat = bvh_matrix[scm_collision_links.at(i)];
-
-            for(int k=0; k<p1_mat.size(); k++)
-            {
-                if(it_scm->first == "body")
-                {
-                    bv_radius = bvb_radius_.at(k);
-                }
-                else
-                {
-                    bv_radius = 0.1;
-                }
-
-                vector<SX> p1_vec = p1_mat.at(k);
-                for(int m=0; m<p2_mat.size(); m++)
-                {
-                    vector<SX> p2_vec = p2_mat.at(m);
-
-                    SX p1 = SX::vertcat({p1_vec.at(0)});
-                    SX p2 = SX::vertcat({p2_vec.at(0)});
-                    dist = dot(p1 - p2, p1 - p2);
-
-                    if(counter == 0)
-                    {
-                        barrier = exp((bv_radius - sqrt(dist))/0.01);
-                        counter = 1;
-                    }
-                    else
-                    {
-                        barrier += exp((bv_radius - sqrt(dist))/0.01);
-                    }
-                }
-            }
-        }
-    }*/
 
     // Get orientation error
     SX q_c_inverse = SX::vertcat({q_c(0), -q_c(1), -q_c(2), -q_c(3)});
@@ -479,4 +432,14 @@ SX MPC::quaternion_product(SX q1, SX q2)
     });
 
     return q_new;
+}
+
+void MPC::setBoundingVolumes(BoundingVolume &bv)
+{
+    bv_ = bv;
+}
+
+void MPC::setForwardKinematics(ForwardKinematics &fk)
+{
+    _fk_ = fk;
 }
