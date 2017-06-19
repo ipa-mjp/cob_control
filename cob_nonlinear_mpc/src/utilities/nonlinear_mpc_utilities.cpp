@@ -83,12 +83,16 @@ bool CobNonlinearMPC::process_KDL_tree(){
     KDL::Frame F;
     double roll,pitch,yaw;
     ROS_INFO_STREAM("robot_.kinematic_chain.getNrOfSegments():"<<robot_.kinematic_chain.getNrOfSegments());
+
     for (uint16_t i = 0; i < robot_.kinematic_chain.getNrOfSegments(); i++)
     {
         robot_.joints.push_back(robot_.kinematic_chain.getSegment(i).getJoint());
+
         ROS_INFO_STREAM("Chain segment "<< robot_.kinematic_chain.getSegment(i).getName());
+
         F=robot_.kinematic_chain.getSegment(i).getFrameToTip();
         F.M.GetRPY(roll,pitch,yaw);
+
 #ifdef __DEBUG__
         ROS_INFO_STREAM("Chain frame "<< " X: " << F.p.x()<< " Y: " << F.p.y()<< " Z: "<<F.p.z());
         ROS_INFO_STREAM("Chain frame "<< " ROLL: " << roll<< " PITCH: " << pitch<< " YAW: "<<yaw);

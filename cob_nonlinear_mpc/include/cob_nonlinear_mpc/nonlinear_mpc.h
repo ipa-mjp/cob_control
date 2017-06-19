@@ -149,8 +149,6 @@ public:
     void setForwardKinematics(ForwardKinematics &fk);
 
 
-
-
     int init_shooting_node();
 };
 
