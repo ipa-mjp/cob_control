@@ -5,25 +5,33 @@
  *      Author: chris
  */
 
-#include <cob_nonlinear_mpc/nonlinear_mpc.h>
+#ifndef FORWARD_KINEMATICS_H
+#define FORWARD_KINEMATICS_H
+#include <cob_nonlinear_mpc/cob_nonlinear_mpc.h>
+#include <cob_nonlinear_mpc/data_types.h>
+#include <cob_nonlinear_mpc/robot.h>
 
-#ifndef COB_CONTROL_COB_NONLINEAR_MPC_INCLUDE_COB_NONLINEAR_MPC_FORWARD_KINEMATICS_H_
-#define COB_CONTROL_COB_NONLINEAR_MPC_INCLUDE_COB_NONLINEAR_MPC_FORWARD_KINEMATICS_H_
+
+using namespace casadi;
+using namespace std;
+
+
 
 class ForwardKinematics
 {
     private:
-
         ros::NodeHandle nh_;
         std::vector<SX> fk_vector_;
-        std::vector<SX> fk_base_;
+        SX fk_base_;
+        std::vector<T_BVH> transformation_vector_; // Vector of symbolic transformation matrices from n-1 to n
 
     public:
         ForwardKinematics(){}
         ~ForwardKinematics(){}
 
-        void generate_symbolic_forward_kinematics(Robot& robot, int control_dim, int state_dim);
+        void symbolic_fk(Robot &robot, SX u, SX x);
+        std::vector<SX> getFkVector();
+        SX getFkBase();
 
 };
-
-#endif /* COB_CONTROL_COB_NONLINEAR_MPC_INCLUDE_COB_NONLINEAR_MPC_FORWARD_KINEMATICS_H_ */
+#endif

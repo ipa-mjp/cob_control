@@ -51,10 +51,13 @@
 #include <ctime>
 #include <casadi/casadi.hpp>
 
-#include <cob_nonlinear_mpc/nonlinear_mpc.h>
-
 #include <boost/thread/mutex.hpp>
 #include <boost/shared_ptr.hpp>
+
+#include <cob_nonlinear_mpc/forward_kinematics.h>
+#include <cob_nonlinear_mpc/bounding_volumes.h>
+#include <cob_nonlinear_mpc/nonlinear_mpc.h>
+
 
 using namespace casadi;
 using namespace std;
@@ -90,12 +93,16 @@ private:
 
     double min_dist;
 
+
+
     XmlRpc::XmlRpcValue scm_;
 public:
     CobNonlinearMPC()
     {
     }
-    ~CobNonlinearMPC(){}
+    ~CobNonlinearMPC(){
+
+    }
 
 
     bool initialize();
