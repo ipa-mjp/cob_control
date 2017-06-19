@@ -152,19 +152,19 @@ bool CobNonlinearMPC::initialize()
 
     if (!nh_.getParam("self_collision_matrix", scm_))
     {
-        ROS_ERROR("Parameter 'self_collision_matrix' not set");
+        ROS_ERROR_STREAM("Parameter '" << nh_.getNamespace() << "/self_collision_matrix' not set");
         //return false;
     }
 
     for (XmlRpc::XmlRpcValue::iterator it = scm_.begin(); it != scm_.end(); ++it)
     {
         std::vector<std::string> empty_vec;
-        this->robot_.self_collision_map_[it->first] = empty_vec;
+        robot_.self_collision_map_[it->first] = empty_vec;
         ROS_ASSERT(it->second.getType() == XmlRpc::XmlRpcValue::TypeArray);
         for (int j=0; j < it->second.size(); ++j)
         {
             ROS_ASSERT(it->second[j].getType() == XmlRpc::XmlRpcValue::TypeString);
-            this->robot_.self_collision_map_[it->first].push_back(it->second[j]);
+            robot_.self_collision_map_[it->first].push_back(it->second[j]);
         }
     }
 
@@ -204,28 +204,36 @@ bool CobNonlinearMPC::initialize()
             }
         }
     }
+
     bv.setBVBpositions(bvb_positions);
     bv.setBVBradius(bvb_radius);
 
     // Parse Robot model
     this->process_KDL_tree();
 
-    SX u_ = SX::sym("u", control_dim);  // control
-    SX x_ = SX::sym("x", state_dim); // states
+    SX u = SX::sym("u", control_dim);  // control
+    SX x = SX::sym("x", state_dim); // states
 
     // Calculate symbolic forward kinematics
+    fk.setX(x);
+    fk.setU(u);
+    fk.symbolic_fk(robot_);
 
-    fk.symbolic_fk(robot_, u_, x_);
     // Bounding Volumes
-    bv.generate_bounding_volumes(robot_, fk);
+    bv.setRobot(robot_);
+    bv.setForwardKinematic(fk);
+    bv.generate_bounding_volumes();
 
     // MPC stuff
+    mpc_ctr_->setBoundingVolumes(bv);
+    mpc_ctr_->setForwardKinematics(fk);
     mpc_ctr_->init();
 
     joint_state_ = KDL::JntArray(robot_.kinematic_chain.getNrOfJoints());
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
 
-    if(robot_.base_active_){
+    if(robot_.base_active_)
+    {
         odometry_state_ = KDL::JntArray(3);
         odometry_sub_ = nh_.subscribe("base/odometry", 1, &CobNonlinearMPC::odometryCallback, this);
         base_vel_pub_ = nh_.advertise<geometry_msgs::Twist>("base/command", 1);

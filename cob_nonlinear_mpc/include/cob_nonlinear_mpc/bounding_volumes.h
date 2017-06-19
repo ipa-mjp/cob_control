@@ -30,8 +30,31 @@
 #ifndef BOUNDING_VOLUME_H
 #define BOUNDING_VOLUME_H
 
-#include <cob_nonlinear_mpc/cob_nonlinear_mpc.h>
+#include <ros/ros.h>
+
+#include <sensor_msgs/JointState.h>
+#include <geometry_msgs/Twist.h>
+#include <std_msgs/Float64MultiArray.h>
+#include <nav_msgs/Odometry.h>
+
+#include <urdf/model.h>
+
+#include <kdl_parser/kdl_parser.hpp>
+#include <kdl/jntarray.hpp>
+#include <kdl/jntarrayvel.hpp>
+#include <kdl/frames.hpp>
+
+#include <tf/transform_listener.h>
+#include <tf/tf.h>
+#include <visualization_msgs/MarkerArray.h>
+
+#include <ctime>
+#include <casadi/casadi.hpp>
+
 #include <cob_nonlinear_mpc/data_types.h>
+#include <cob_nonlinear_mpc/robot.h>
+#include <cob_nonlinear_mpc/forward_kinematics.h>
+
 
 using namespace casadi;
 using namespace std;
@@ -48,21 +71,27 @@ private:
     vector<double> bvb_radius_;
 
     ros::Publisher marker_pub_;
+    Robot robot_;
+    ForwardKinematics fk_;
 
 public:
     BoundingVolume()
     {
+        marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("nmpc/bvh", 1);
     }
     ~BoundingVolume(){}
+    void plotBoundingVolumes(SX x_current);
+    void addCollisionBall(const geometry_msgs::Point point, double radius, int id);
 
-
-    void visualizeBVH(const geometry_msgs::Point point, double radius, int id);
-
-    SX getOutputConstraints(Robot &robot);
-    void generate_bounding_volumes(Robot &robot, ForwardKinematics &fk);
+    SX getOutputConstraints();
+    void generate_bounding_volumes();
 
     bool setBVBpositions(vector<double> bvb_pos);
     bool setBVBradius(vector<double> bvb_rad);
+    void setRobot(Robot robot);
+    Robot getRobot();
+    void setForwardKinematic(ForwardKinematics fk);
+    ForwardKinematics getForwardKinematic();
 };
 
 #endif  // BOUNDING_VOLUME_H

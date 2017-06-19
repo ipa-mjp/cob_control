@@ -29,7 +29,8 @@
 
 #include <cob_nonlinear_mpc/nonlinear_mpc.h>
 
-void MPC::init(){
+void MPC::init()
+{
     // Total number of NLP variables
     NV = state_dim_*(num_shooting_nodes_+1) +control_dim_*num_shooting_nodes_;
 
@@ -62,6 +63,14 @@ void MPC::init(){
         ROS_INFO_STREAM("CONTROL DIM: "<<control_dim_);
         u_init_.push_back(0);
     }
+
+    x_ = _fk_.getX();
+    u_ = _fk_.getU();
+
+    // Get end-effector fk
+    fk_ = _fk_.getFkVector().at(_fk_.getFkVector().size()-1);
+
+    ROS_WARN_STREAM("MPC initialized");
 }
 
 int MPC::get_num_shooting_nodes(){
@@ -138,7 +147,6 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     SX barrier;
     SX dist;
 
-
     // Get orientation error
     SX q_c_inverse = SX::vertcat({q_c(0), -q_c(1), -q_c(2), -q_c(3)});
     SX e_quat= quaternion_product(q_c_inverse,q_target);
@@ -169,10 +177,16 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     //ROS_INFO("Objective");
     SX error=pos_c-pos_target;
 
-    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy + 10 * dot(error_attitute,error_attitute);// + barrier;
+    barrier = bv_.getOutputConstraints();
+
+    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy + 10 * dot(error_attitute,error_attitute) + barrier;
+    SX phi = 100*dot(pos_c-pos_target,pos_c-pos_target) + 100 * dot(error_attitute,error_attitute);
 
     //ROS_INFO("Create Euler integrator function");
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
+
+    Function F_terminal = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, phi);
+
 
     // Offset in V
     int offset=this->init_shooting_node();
@@ -198,6 +212,10 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
         // Add objective function contribution
         J += I_out.at("qf");
     }
+    // Terminal cost
+    // Create an evaluation node
+    MXDict I_term = F_terminal( MXDict{ {"x0", X[num_shooting_nodes_-1]}, {"p", U[num_shooting_nodes_-1]} });
+    J += I_term.at("qf");
 
     ROS_INFO("NLP");
     MXDict nlp = {{"x", V}, {"f", J}, {"g", vertcat(g)}};
@@ -219,25 +237,21 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
 
     std::map<std::string, DM> arg, res;
 
-    //ROS_INFO("Bounds and initial guess");
+    ROS_INFO("Bounds and initial guess");
     arg["lbx"] = min_state;
     arg["ubx"] = max_state;
     arg["lbg"] = 0;
     arg["ubg"] = 0;
     arg["x0"] = init_state;
-    /*ROS_INFO_STREAM("INIT STATE DIM:" << init_state.size());
-    ROS_INFO_STREAM("min INIT STATE DIM:" << min_state.size());
-    ROS_INFO_STREAM("max STATE DIM:" << max_state.size());*/
-    ROS_INFO("Solve the problem");
+
     res = solver(arg);
 
     // Optimal solution of the NLP
     vector<double> V_opt(res.at("x"));
     vector<double> J_opt(res.at("f"));
 
-    ROS_INFO("Get the optimal control");
     Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(state_dim_);
-//    Eigen::VectorXd x_new = Eigen::VectorXd::Zero(mpc_ctr_->get_state_dim());
+
     SX sx_x_new;
     u_open_loop_.clear();
     x_open_loop_.clear();
@@ -255,56 +269,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
 
     // Safe optimal control sequence at time t_k and take it as inital guess at t_k+1
 
-    ROS_INFO("Plot bounding volumes");
-    geometry_msgs::Point point;
-    point.x = 0;
-    point.y = 0;
-    point.z = 0;
-
-    /*SX result;
-    for( it_scm = self_collision_map_.begin(); it_scm != self_collision_map_.end(); it_scm++)
-    {
-        vector<string> tmp = it_scm->second;
-
-        for(int i=0; i<tmp.size();i++)
-        {
-            vector<vector<SX>> SX_vec = bvh_matrix[tmp.at(i)];
-            for(int k=0; k<SX_vec.size(); k++)
-            {
-                SX test = SX::horzcat({SX_vec.at(k).at(0)});
-                Function tesssst = Function("test", {x_}, {test});
-                result = tesssst(sx_x_new).at(0);
-                point.x = (double)result(0);
-                point.y = (double)result(1);
-                point.z = (double)result(2);
-
-                bv_radius = 0.1;
-                visualizeBVH(point, bv_radius, i+i*tmp.size());
-            }
-        }
-
-
-        vector<vector<SX>> SX_vec = bvh_matrix[it_scm->first];
-        for(int k=0; k<SX_vec.size(); k++)
-        {
-            SX test = SX::horzcat({SX_vec.at(k).at(0)});
-            Function tesssst = Function("test", {x_}, {test});
-            result = tesssst(sx_x_new).at(0);
-            point.x = (double)result(0);
-            point.y = (double)result(1);
-            point.z = (double)result(2);
-
-            if(it_scm->first == "body")
-            {
-                bv_radius = bvb_radius_.at(k);
-            }
-            else
-            {
-                bv_radius = 0.1;
-            }
-            visualizeBVH(point, bv_radius, k+tmp.size()+SX_vec.size());
-        }
-    }*/
+    bv_.plotBoundingVolumes(sx_x_new);
 
     KDL::Frame ef_pos = forward_kinematics(state);
 
@@ -368,7 +333,6 @@ void MPC::acceleration_coordination(const KDL::JntArray& state){
 }
 
 KDL::Frame MPC::forward_kinematics(const KDL::JntArray& state){
-
 
     KDL::Frame ef_pos; //POsition of the end effector
 
