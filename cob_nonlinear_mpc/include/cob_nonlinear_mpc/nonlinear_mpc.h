@@ -64,24 +64,24 @@ class MPC
 {
 private:
 
+    ros::NodeHandle nh_;
+    BoundingVolume bv_;
+    ForwardKinematics _fk_;
+
     int num_shooting_nodes_;
     double time_horizon_;
     int state_dim_;
     int control_dim_;
     int NV;
 
-    vector<vector<double>> u_open_loop_;
-    vector<vector<double>> x_open_loop_;
+    vector<vector<double>> u_open_loop_, x_open_loop_;
 
-    vector<double> u_min;
-    vector<double> u_max;
-
-    vector<double> x_min;
-    vector<double> x_max;
-    vector<double> xf_min;
-    vector<double> xf_max;
-
+    vector<double> u_min, u_max;
+    vector<double> x_min, x_max;
+    vector<double> xf_min, xf_max;
     vector<double> u_init_;
+
+
     // Symbolic variables
     SX u_; //control symbolic input
     SX x_; //robot symbolic state
@@ -89,23 +89,17 @@ private:
     SX pos_c ;//Current cartesian position
     SX pos_target; //Target position
     SX q_target; //target quaternion orientation
-
     SX fk_; //Forward kinematics
-    SX fk_base_; //Base Forward kinematics
-    std::vector<SX> fk_vector_; // Forward kinematics for each link
 
     // Declare variable vector for the NLP
     MX V ;
     vector<MX> X, U;
-    // NLP variable bounds and initial guess
-    vector<double> min_state,max_state,init_state;
+    vector<double> v_min,v_max,v_init;
 
-    vector<double> x_new; //new state after computation
+    vector<double> x_new;
 
-    ros::NodeHandle nh_;
-
-    BoundingVolume bv_;
-    ForwardKinematics _fk_;
+    // Optimized NLP
+    vector<double> V_opt_;
 
 public:
     MPC(int num_shooting_nodes,double time_horizon ,int state_dim,int control_dim)
@@ -150,6 +144,7 @@ public:
 
 
     int init_shooting_node();
+    void shiftInit();
 };
 
 #endif  // NONLINEAR_MPC_H
