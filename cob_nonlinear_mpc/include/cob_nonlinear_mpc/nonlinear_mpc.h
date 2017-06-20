@@ -131,6 +131,8 @@ public:
     vector<double> x0_min;
     vector<double> x0_max;
     vector<double> x_init;
+    vector<double> weiting;
+    SX R ;
 
     // Base function
     Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state);
@@ -159,6 +161,7 @@ public:
     void setBoundingVolumes(BoundingVolume &bv);
     void setForwardKinematics(ForwardKinematics &fk);
 
+    void acceleration_coordination(const KDL::JntArray& state);
 
     int init_shooting_node();
 
