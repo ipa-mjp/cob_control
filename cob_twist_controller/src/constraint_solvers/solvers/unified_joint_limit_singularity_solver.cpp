@@ -36,6 +36,8 @@
 Eigen::MatrixXd UnifiedJointLimitSingularitySolver::solve(const Vector6d_t& in_cart_velocities,
                                                const JointStates& joint_states)
 {
+    timespec start,end;
+    clock_gettime(CLOCK_REALTIME,&start);
 
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(this->jacobian_data_, Eigen::ComputeThinU | Eigen::ComputeThinV);
     Eigen::MatrixXd J=this->jacobian_data_;
@@ -73,6 +75,8 @@ Eigen::MatrixXd UnifiedJointLimitSingularitySolver::solve(const Vector6d_t& in_c
     Eigen::MatrixXd pinv=pinv_calc_.calculate(this->params_, this->damping_, J_robust);
     Eigen::MatrixXd qdots_out =Wt*Wt_T*J_T*pinv*in_cart_velocities;
 
+    clock_gettime(CLOCK_REALTIME,&end);
+    ROS_INFO_STREAM("CYCLE TIME:"<<end.tv_nsec-start.tv_nsec);
     return qdots_out;
 }
 
