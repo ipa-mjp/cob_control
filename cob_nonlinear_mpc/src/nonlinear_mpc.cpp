@@ -60,7 +60,6 @@ void MPC::init()
 
     for(int i = 0; i < control_dim_; i++)
     {
-        ROS_INFO_STREAM("CONTROL DIM: "<<control_dim_);
         u_init_.push_back(0);
     }
 
@@ -118,7 +117,6 @@ void MPC::set_input_constraints(vector<double> input_constraints_min,vector<doub
 
 Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state)
 {
-
     // Bounds and initial guess for the control
 #ifdef __DEBUG__
     ROS_INFO_STREAM("input_constraints_min_: " <<this->input_constraints_min_.size());
@@ -173,7 +171,6 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     SX S = 0.01*SX(state_convariance);
     SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
 
-    //ROS_INFO_STREAM("STATE COVARIANCE: "<< S);
     //ROS_INFO("Objective");
     SX error=pos_c-pos_target;
 
@@ -217,7 +214,6 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     MXDict I_term = F_terminal( MXDict{ {"x0", X[num_shooting_nodes_-1]}, {"p", U[num_shooting_nodes_-1]} });
     J += I_term.at("qf");
 
-    ROS_INFO("NLP");
     MXDict nlp = {{"x", V}, {"f", J}, {"g", vertcat(g)}};
 
     // Set options
@@ -229,15 +225,15 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
 //    opts["ipopt.hessian_constant"] = "yes";
     opts["ipopt.linear_solver"] = "ma27";
     opts["ipopt.print_level"] = 0;
-    opts["print_time"] = true;
-    opts["expand"] = true;  // Removes overhead
+    opts["print_time"] = false;
+    opts["expand"] = false;  // Removes overhead
 
-    ROS_INFO("Create an NLP solver and buffers");
+    ros::Time time = ros::Time::now();
+
     Function solver = nlpsol("nlpsol", "ipopt", nlp, opts);
 
     std::map<std::string, DM> arg, res;
 
-    ROS_INFO("Bounds and initial guess");
     arg["lbx"] = min_state;
     arg["ubx"] = max_state;
     arg["lbg"] = 0;
@@ -246,6 +242,9 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
 
     res = solver(arg);
 
+    ros::Time time_new = ros::Time::now();
+
+    ROS_INFO_STREAM("NLP time: " << (time_new - time).toSec());
     // Optimal solution of the NLP
     vector<double> V_opt(res.at("x"));
     vector<double> J_opt(res.at("f"));
@@ -275,7 +274,8 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
 
     return q_dot;
 }
-int MPC::init_shooting_node(){
+int MPC::init_shooting_node()
+{
     // Offset in V
     int offset=0;
     X.clear();
