@@ -91,7 +91,6 @@ private:
     SX pos_c ;//Current cartesian position
     SX pos_target; //Target position
     SX q_target; //target quaternion orientation
-    SX R; //coordination
 
     SX fk_; //Forward kinematics
     SX fk_base_; //Base Forward kinematics
@@ -132,7 +131,6 @@ public:
     vector<double> x0_min;
     vector<double> x0_max;
     vector<double> x_init;
-    vector<double> weiting;
     SX R ;
 
     // Base function
@@ -166,7 +164,6 @@ public:
 
     int init_shooting_node();
 
-    void acceleration_coordination(const KDL::JntArray& state);
 };
 
 #endif  // NONLINEAR_MPC_H
