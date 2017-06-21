@@ -34,6 +34,8 @@ void MPC::init()
     // Total number of NLP variables
     NV = state_dim_*(num_shooting_nodes_+1) +control_dim_*num_shooting_nodes_;
 
+    R = SX::scalar_matrix(control_dim_,1,1);
+
     V = MX::sym("V",NV);
     vector<double> tmp;
     for(int k=0; k < num_shooting_nodes_; ++k)
@@ -60,6 +62,7 @@ void MPC::init()
 
     for(int i = 0; i < control_dim_; i++)
     {
+        ROS_INFO_STREAM("CONTROL DIM: "<<control_dim_);
         u_init_.push_back(0);
     }
 
@@ -182,7 +185,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     //ROS_INFO("Create Euler integrator function");
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
 
-    Function F_terminal = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, phi);
+    //Function F_terminal = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, phi);
 
 
     // Offset in V
@@ -211,16 +214,17 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     }
     // Terminal cost
     // Create an evaluation node
-    MXDict I_term = F_terminal( MXDict{ {"x0", X[num_shooting_nodes_-1]}, {"p", U[num_shooting_nodes_-1]} });
-    J += I_term.at("qf");
+    //MXDict I_term = F_terminal( MXDict{ {"x0", X[num_shooting_nodes_-1]}, {"p", U[num_shooting_nodes_-1]} });
+    //J += I_term.at("qf");
 
+    ROS_INFO("NLP");
     MXDict nlp = {{"x", V}, {"f", J}, {"g", vertcat(g)}};
 
     // Set options
     Dict opts;
 
-    opts["ipopt.tol"] = 1e-4;
-    opts["ipopt.max_iter"] = 20;
+    opts["ipopt.tol"] = 1e-3;
+    opts["ipopt.max_iter"] = 10;
 //    opts["ipopt.hessian_approximation"] = "limited-memory";
 //    opts["ipopt.hessian_constant"] = "yes";
     opts["ipopt.linear_solver"] = "ma27";
@@ -270,7 +274,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
 
     bv_.plotBoundingVolumes(sx_x_new);
 
-    KDL::Frame ef_pos = forward_kinematics(state);
+    //KDL::Frame ef_pos = forward_kinematics(state);
 
     return q_dot;
 }
@@ -323,6 +327,7 @@ int MPC::init_shooting_node()
     x_init.clear();
     return offset += state_dim_;
 }
+
 void MPC::acceleration_coordination(const KDL::JntArray& state){
     for(int i=0; i<weiting.size();i++){
         for(int j=0; j<weiting.size();j++){

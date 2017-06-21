@@ -91,6 +91,7 @@ private:
     SX pos_c ;//Current cartesian position
     SX pos_target; //Target position
     SX q_target; //target quaternion orientation
+    SX R; //coordination
 
     SX fk_; //Forward kinematics
     SX fk_base_; //Base Forward kinematics

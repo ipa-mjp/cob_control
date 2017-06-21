@@ -87,7 +87,6 @@ private:
     ros::Publisher base_vel_pub_;
     ros::Publisher pub_;
 
-
     KDL::JntArray joint_state_;
     KDL::JntArray odometry_state_;
     KDL::Tree robot_tree_;
