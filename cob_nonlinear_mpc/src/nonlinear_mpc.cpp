@@ -72,9 +72,28 @@ void MPC::init()
     // Get end-effector fk
     fk_ = _fk_.getFkVector().at(_fk_.getFkVector().size()-1);
 
+    weiting.resize(control_dim_,1);
+
+    R = SX::sym("R",control_dim_,control_dim_);
+
     ROS_WARN_STREAM("MPC initialized");
 }
 
+void MPC::set_coordination_weights(bool base_active, vector<double> masses){
+    if(base_active){
+        for(int i=3;i<control_dim_;i++){
+            weiting.at(i)=masses.at(i-3);
+        }
+        for(int i=3;i<control_dim_;i++){
+            weiting.at(i)=masses.at(i-3);
+        }
+    }
+    else{
+        for(int i=0;i<control_dim_;i++){
+            weiting.at(i)=masses.at(i);
+        }
+    }
+}
 int MPC::get_num_shooting_nodes(){
     return this->num_shooting_nodes_;
 }

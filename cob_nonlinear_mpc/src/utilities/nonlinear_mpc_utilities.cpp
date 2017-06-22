@@ -162,4 +162,34 @@ bool CobNonlinearMPC::process_KDL_tree(){
             }
         }
 
+#ifdef __DEBUG__
+    ROS_INFO("ROBOT MASSES");
+    for(int i=0;i<robot_.forward_kinematics.size();i++){
+        ROS_INFO_STREAM("Segment " <<robot_.forward_kinematics.at(i).getName());
+        ROS_INFO_STREAM("\n Segment x: " <<robot_.forward_kinematics.at(i).getFrameToTip().p.x());
+        ROS_INFO_STREAM(" y:" <<robot_.forward_kinematics.at(i).getFrameToTip().p.y());
+        ROS_INFO_STREAM(" z:" <<robot_.forward_kinematics.at(i).getFrameToTip().p.z());
+        ROS_INFO_STREAM(" Mass:" <<robot_.kinematic_chain.getSegment(i).getInertia().getMass());
+    }
+#endif
+    if(robot_.base_active_){
+        for(int i=0;i<3;i++){
+            robot_.masses.at(i)=robot_.kinematic_chain.getSegment(0).getInertia().getMass();
+            ROS_INFO("BASE MASSES: %f", robot_.kinematic_chain.getSegment(0).getInertia().getMass());
+        }
+        for(int i=0;i<robot_.forward_kinematics.size();i++){
+            if(robot_.kinematic_chain.getSegment(i).getJoint().getType()==0){
+                robot_.masses.push_back(robot_.kinematic_chain.getSegment(i).getInertia().getMass());
+                ROS_INFO("JOINT MASSES: %f", robot_.kinematic_chain.getSegment(i).getInertia().getMass());
+            }
+        }
+    }
+    else{
+        for(int i=0;i<robot_.forward_kinematics.size();i++){
+            if(robot_.kinematic_chain.getSegment(i).getJoint().getType()==0){
+                robot_.masses.push_back(robot_.kinematic_chain.getSegment(i).getInertia().getMass());
+                ROS_INFO("JOINT MASSES: %f", robot_.kinematic_chain.getSegment(i).getInertia().getMass());
+            }
+        }
+    }
 }
