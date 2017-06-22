@@ -162,7 +162,7 @@ bool CobNonlinearMPC::process_KDL_tree(){
             }
         }
 
-#ifdef __DEBUG__
+//#ifdef __DEBUG__
     ROS_INFO("ROBOT MASSES");
     for(int i=0;i<robot_.forward_kinematics.size();i++){
         ROS_INFO_STREAM("Segment " <<robot_.forward_kinematics.at(i).getName());
@@ -171,10 +171,11 @@ bool CobNonlinearMPC::process_KDL_tree(){
         ROS_INFO_STREAM(" z:" <<robot_.forward_kinematics.at(i).getFrameToTip().p.z());
         ROS_INFO_STREAM(" Mass:" <<robot_.kinematic_chain.getSegment(i).getInertia().getMass());
     }
-#endif
+//#endif
+
     if(robot_.base_active_){
         for(int i=0;i<3;i++){
-            robot_.masses.at(i)=robot_.kinematic_chain.getSegment(0).getInertia().getMass();
+            robot_.masses.push_back(50.0);//read from parameter in future
             ROS_INFO("BASE MASSES: %f", robot_.kinematic_chain.getSegment(0).getInertia().getMass());
         }
         for(int i=0;i<robot_.forward_kinematics.size();i++){

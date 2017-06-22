@@ -164,7 +164,7 @@ public:
 
     int init_shooting_node();
 
-    void set_coordination_weights(bool base_active, vector<double> masses);
+    void set_coordination_weights(vector<double> masses);
 
 };
 

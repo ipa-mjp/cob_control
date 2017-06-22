@@ -111,6 +111,7 @@ void ForwardKinematics::symbolic_fk(Robot &robot)
         }
         fk_vector_.push_back(tmp); // stacks up multiplied transformation until link n
     }
+    ROS_INFO("Done with forward kinemtcis...");
 }
 
 std::vector<SX> ForwardKinematics::getFkVector()

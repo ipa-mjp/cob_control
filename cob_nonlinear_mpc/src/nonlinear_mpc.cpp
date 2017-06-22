@@ -34,8 +34,6 @@ void MPC::init()
     // Total number of NLP variables
     NV = state_dim_*(num_shooting_nodes_+1) +control_dim_*num_shooting_nodes_;
 
-    R = SX::scalar_matrix(control_dim_,1,1);
-
     V = MX::sym("V",NV);
     vector<double> tmp;
     for(int k=0; k < num_shooting_nodes_; ++k)
@@ -72,27 +70,18 @@ void MPC::init()
     // Get end-effector fk
     fk_ = _fk_.getFkVector().at(_fk_.getFkVector().size()-1);
 
-    weiting.resize(control_dim_,1);
-
-    R = SX::sym("R",control_dim_,control_dim_);
-
     ROS_WARN_STREAM("MPC initialized");
 }
 
-void MPC::set_coordination_weights(bool base_active, vector<double> masses){
-    if(base_active){
-        for(int i=3;i<control_dim_;i++){
-            weiting.at(i)=masses.at(i-3);
-        }
-        for(int i=3;i<control_dim_;i++){
-            weiting.at(i)=masses.at(i-3);
-        }
+void MPC::set_coordination_weights(vector<double> masses){
+    ROS_INFO("Setting weights");
+    ROS_INFO_STREAM("Mass size"<<masses.size()<< " control size " <<control_dim_);
+    for(int i=0;i<masses.size();i++){
+        weiting.push_back(masses.at(i));
     }
-    else{
-        for(int i=0;i<control_dim_;i++){
-            weiting.at(i)=masses.at(i);
-        }
-    }
+    R=weiting;
+    R.print(std::cout);
+    ROS_INFO("Done Setting weights");
 }
 int MPC::get_num_shooting_nodes(){
     return this->num_shooting_nodes_;
@@ -184,22 +173,24 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     ROS_INFO_STREAM("ATTITUDE ERROR: " << (double)test_v(0) <<" " << (double)test_v(1) <<" "<< (double)test_v(2) <<" "<< (double)test_v(3));
     this->acceleration_coordination(state);
     //R.print(std::cout);
+    R.print(std::cout);
     SX u2 = SX::mtimes(R,u_);
-    //u2.print(std::cout);
+    u2.print(std::cout);
     SX energy = SX::dot(u_,u2);
-    //energy.print(std::cout);
-    //ROS_INFO("L2 norm of the states");
+    energy.print(std::cout);
+
+    /*ROS_INFO("L2 norm of the states");
     std::vector<int> state_convariance(state_dim_,1);
     SX S = 0.01*SX(state_convariance);
     SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
-
+     */
     //ROS_INFO("Objective");
     SX error=pos_c-pos_target;
 
     barrier = bv_.getOutputConstraints();
 
     SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy + 10 * dot(error_attitute,error_attitute) + barrier;
-    SX phi = 100*dot(pos_c-pos_target,pos_c-pos_target) + 100 * dot(error_attitute,error_attitute);
+    //SX phi = 100*dot(pos_c-pos_target,pos_c-pos_target) + 100 * dot(error_attitute,error_attitute);
 
     //ROS_INFO("Create Euler integrator function");
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
@@ -210,7 +201,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     // Offset in V
     int offset=this->init_shooting_node();
 
-    //ROS_INFO("(Make sure that the size of the variable vector is consistent with the number of variables that we have referenced");
+    ROS_INFO("(Make sure that the size of the variable vector is consistent with the number of variables that we have referenced");
     casadi_assert(offset==NV);
 
     // Objective function
@@ -219,7 +210,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     //Constraint function and bounds
     vector<MX> g;
 
-    //ROS_INFO("Loop over shooting nodes");
+    ROS_INFO("Loop over shooting nodes");
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
         // Create an evaluation node
@@ -348,12 +339,7 @@ int MPC::init_shooting_node()
 }
 
 void MPC::acceleration_coordination(const KDL::JntArray& state){
-    for(int i=0; i<weiting.size();i++){
-        for(int j=0; j<weiting.size();j++){
-            R(i,j)=0.0;
-        }
-        R(i,i)=weiting.at(i);
-    }
+
 }
 
 KDL::Frame MPC::forward_kinematics(const KDL::JntArray& state){
