@@ -34,7 +34,6 @@ using namespace casadi;
 using namespace std;
 
 
-
 class ForwardKinematics
 {
     private:
@@ -42,6 +41,7 @@ class ForwardKinematics
         std::vector<SX> fk_vector_;
         SX T_base_;
         std::vector<T_BVH> transformation_vector_; // Vector of symbolic transformation matrices from n-1 to n
+        std::vector<T_BVH> jacobian_vector_; // Vector of symbolic transformation matrices from n-1 to n
         SX u_;
         SX x_;
 
@@ -50,6 +50,7 @@ class ForwardKinematics
         ~ForwardKinematics(){}
 
         void symbolic_fk(Robot &robot);
+        void symbolic_jacobian(Robot &robot);
         std::vector<SX> getFkVector();
         SX getFkBase();
         std::vector<T_BVH> getTransformVector();

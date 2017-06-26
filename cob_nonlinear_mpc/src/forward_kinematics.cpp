@@ -6,6 +6,31 @@
  */
 #include <cob_nonlinear_mpc/forward_kinematics.h>
 
+void ForwardKinematics::symbolic_jacobian(Robot &robot){
+    SX Jv = SX::sym("JV",4,4);
+    SX Jw = SX::sym("JW",4,4);
+
+    for(int i=0;i<robot.joint_frames.size();i++)
+    {
+        if(robot.base_active_)
+        {
+            if(i==0){
+
+            }
+            else{
+
+            }
+        }
+        else{
+            if(i==0){
+
+            }
+            else{
+
+            }
+        }
+    }
+}
 
 void ForwardKinematics::symbolic_fk(Robot &robot)
 {
