@@ -108,7 +108,7 @@ private:
     ros::NodeHandle nh_;
 
     //COORDINATION
-    std::vector<double> weiting;
+    Eigen::MatrixXd weiting;
 
     BoundingVolume bv_;
     ForwardKinematics _fk_;
@@ -131,7 +131,9 @@ public:
     vector<double> x0_min;
     vector<double> x0_max;
     vector<double> x_init;
+
     SX R ;
+    vector<Eigen::VectorXd> previous_command;
 
     // Base function
     Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state);

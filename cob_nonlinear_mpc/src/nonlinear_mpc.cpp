@@ -64,6 +64,9 @@ void MPC::init()
         u_init_.push_back(0);
     }
 
+    previous_command.push_back(Eigen::VectorXd::Zero(state_dim_));
+    previous_command.push_back(Eigen::VectorXd::Zero(state_dim_));
+
     x_ = _fk_.getX();
     u_ = _fk_.getU();
 
@@ -75,12 +78,11 @@ void MPC::init()
 
 void MPC::set_coordination_weights(vector<double> masses){
     ROS_INFO("Setting weights");
-    ROS_INFO_STREAM("Mass size"<<masses.size()<< " control size " <<control_dim_);
+    ROS_INFO_STREAM("Mass size"<<masses.size()<< " control size " <<u_.size());
+    R.resize(masses.size(),1);
     for(int i=0;i<masses.size();i++){
-        weiting.push_back(masses.at(i));
+        R(i)=u_(i)*masses.at(i);
     }
-    R=weiting;
-    R.print(std::cout);
     ROS_INFO("Done Setting weights");
 }
 int MPC::get_num_shooting_nodes(){
@@ -173,10 +175,8 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     ROS_INFO_STREAM("ATTITUDE ERROR: " << (double)test_v(0) <<" " << (double)test_v(1) <<" "<< (double)test_v(2) <<" "<< (double)test_v(3));
     this->acceleration_coordination(state);
     //R.print(std::cout);
-    R.print(std::cout);
-    SX u2 = SX::mtimes(R,u_);
-    u2.print(std::cout);
-    SX energy = SX::dot(u_,u2);
+
+    SX energy = SX::dot(R,u_);
     energy.print(std::cout);
 
     /*ROS_INFO("L2 norm of the states");
@@ -184,15 +184,15 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     SX S = 0.01*SX(state_convariance);
     SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
      */
-    //ROS_INFO("Objective");
+
     SX error=pos_c-pos_target;
 
     barrier = bv_.getOutputConstraints();
-
-    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy + 10 * dot(error_attitute,error_attitute) + barrier;
+    ROS_INFO("Objective");
+    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy + 10 * dot(error_attitute,error_attitute)+barrier;
     //SX phi = 100*dot(pos_c-pos_target,pos_c-pos_target) + 100 * dot(error_attitute,error_attitute);
 
-    //ROS_INFO("Create Euler integrator function");
+    ROS_INFO("Create Euler integrator function");
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
 
     //Function F_terminal = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, phi);
@@ -233,7 +233,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     // Set options
     Dict opts;
 
-    opts["ipopt.tol"] = 1e-3;
+    opts["ipopt.tol"] = 1e-5;
     opts["ipopt.max_iter"] = 10;
 //    opts["ipopt.hessian_approximation"] = "limited-memory";
 //    opts["ipopt.hessian_constant"] = "yes";
@@ -286,6 +286,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
 
     //KDL::Frame ef_pos = forward_kinematics(state);
 
+    previous_command.push_back(q_dot);
     return q_dot;
 }
 int MPC::init_shooting_node()
@@ -326,7 +327,7 @@ int MPC::init_shooting_node()
         offset += control_dim_;
     }
 
-    //ROS_INFO("State at end");
+    ROS_INFO("State at end");
     X.push_back(V.nz(Slice(offset,offset+state_dim_)));
     min_state.insert(min_state.end(), xf_min.begin(), xf_min.end());
     max_state.insert(max_state.end(), xf_max.begin(), xf_max.end());
@@ -339,7 +340,12 @@ int MPC::init_shooting_node()
 }
 
 void MPC::acceleration_coordination(const KDL::JntArray& state){
-
+    Eigen::VectorXd acc = previous_command.at(1)-previous_command.at(0);
+    for(int i=0;i<control_dim_;i++){
+        R(i)=R(i)*acc[i]/time_horizon_;
+    }
+    ROS_INFO_STREAM("Acceleration: "<< acc);
+    previous_command.pop_back();
 }
 
 KDL::Frame MPC::forward_kinematics(const KDL::JntArray& state){

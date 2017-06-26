@@ -236,8 +236,8 @@ bool CobNonlinearMPC::initialize()
     // MPC stuff
     mpc_ctr_->setBoundingVolumes(bv);
     mpc_ctr_->setForwardKinematics(fk);
-    mpc_ctr_->set_coordination_weights(robot_.masses);
     mpc_ctr_->init();
+    mpc_ctr_->set_coordination_weights(robot_.masses);
 
     joint_state_ = KDL::JntArray(robot_.kinematic_chain.getNrOfJoints());
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
