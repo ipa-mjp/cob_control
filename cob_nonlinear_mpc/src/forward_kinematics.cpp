@@ -1,11 +1,71 @@
-/*
- * forward_kinematics.cpp
+/*!
+ *****************************************************************
+ * \file
  *
- *  Created on: 18.06.2017
- *      Author: chris
- */
+ * \note
+ *   Copyright (c) 2017 \n
+ *   Fraunhofer Institute for Manufacturing Engineering
+ *   and Automation (IPA) \n\n
+ *
+ *****************************************************************
+ *
+ * \note
+ *   Project name: care-o-bot
+ * \note
+ *   ROS stack name: cob_control
+ * \note
+ *   ROS package name: cob_nonlinear_mpc
+ *
+ * \author
+ *   Author: Bruno Brito  email: Bruno.Brito@ipa.fraunhofer.de
+ *   Christoph Mark, email: Christoph.Mark@ipa.fraunhofer.de
+ *
+ * \date Date of creation: July, 2017
+ *
+ * \brief
+ *
+ *
+ ****************************************************************/
 #include <cob_nonlinear_mpc/forward_kinematics.h>
 
+void ForwardKinematics::symbolic_jacobian(Robot &robot){
+    SX Jv_i = SX::vertcat({0,0,0});
+    SX Jw_i = SX::vertcat({0,0,0});
+    KDL::Vector z0 = SX::vertcat({0,0,1});
+    KDL::Vector o0 = SX::vertcat({0,0,0});
+    int end = fk_vector_.size();
+    for(int i=0;i<robot.joint_frames.size();i++)
+    {
+        KDL::Vector pos;
+        KDL::Rotation rot;
+        rot=robot.joint_frames.at(i).M;
+        pos=robot.joint_frames.at(i).p;
+
+        if(i==0){
+            if(robot.kinematic_chain.getSegment(i).getJoint().getType()==0){ //ROTATIONAL JOINT
+                SX T_0_end = SX::vec({fk_vector_.at(end)(0,3),fk_vector_.at(end)(1,3),fk_vector_.at(end)(2,3)});
+                Jv_i = SX::cross(z0,T_0_end);
+                Jw_i=z0;
+            }
+            else{ // PRISMATIC JOINT
+                Jv_i = z0;
+                Jw_i=  SX::vercat({0,0,0});
+            }
+        }
+        else{
+            if(robot.kinematic_chain.getSegment(i).getJoint().getType()==0){ //ROTATIONAL JOINT
+                SX T_0_end = SX::vec({fk_vector_.at(end)(0,3),fk_vector_.at(end)(1,3),fk_vector_.at(end)(2,3)});
+                SX T_0_i = SX::vec({fk_vector_.at(i)(0,3),fk_vector_.at(i)(1,3),fk_vector_.at(i)(2,3)});
+                Jv_i = SX::cross(T_0_i,T_0_end-T_0_i);
+                Jw_i=SX::vec({fk_vector_.at(i)(0,2),fk_vector_.at(i)(1,2),fk_vector_.at(i)(2,2)});;
+            }
+            else{ // PRISMATIC JOINT
+                Jv_i = SX::vec({fk_vector_.at(i)(0,2),fk_vector_.at(i)(1,2),fk_vector_.at(i)(2,2)});;;
+                Jw_i=  SX::vercat({0,0,0});
+            }
+        }
+    }
+}
 
 void ForwardKinematics::symbolic_fk(Robot &robot)
 {
@@ -62,7 +122,8 @@ void ForwardKinematics::symbolic_fk(Robot &robot)
         T_BVH fk_transform;
 
         // Todo: There must be a better solution..
-        fk_transform.link = robot.kinematic_chain.getSegment(robot.forward_kinematics.size() - robot.joint_frames.size() -1 +i).getName();
+        fk_transform.link = robot.kinematic_chain.getSegment(robot.forward_kinematics.size() - robot.joint_frames.size() +i).getName();
+
         fk_transform.T = T;
 
         if(pos.z() > 0.1)
@@ -110,6 +171,7 @@ void ForwardKinematics::symbolic_fk(Robot &robot)
         }
         fk_vector_.push_back(tmp); // stacks up multiplied transformation until link n
     }
+    ROS_INFO("Done with forward kinemtcis...");
 }
 
 std::vector<SX> ForwardKinematics::getFkVector()
