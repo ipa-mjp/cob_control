@@ -342,7 +342,7 @@ int MPC::init_shooting_node()
 void MPC::acceleration_coordination(const KDL::JntArray& state){
     Eigen::VectorXd acc = previous_command.at(1)-previous_command.at(0);
     for(int i=0;i<control_dim_;i++){
-        R(i)=R(i)*acc[i]/time_horizon_;
+        //R(i)=R(i)*acc[i]/time_horizon_;
     }
     ROS_INFO_STREAM("Acceleration: "<< acc);
     previous_command.pop_back();

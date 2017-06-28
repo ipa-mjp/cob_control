@@ -98,17 +98,15 @@ bool CobNonlinearMPC::process_KDL_tree(){
         ROS_INFO_STREAM("Chain frame "<< " ROLL: " << roll<< " PITCH: " << pitch<< " YAW: "<<yaw);
 #endif
     }
-#ifdef __DEBUG__
+//#ifdef __DEBUG__
         // JointNames This can be later deleted
         std::vector<KDL::Vector> joint_origins;
         for (uint16_t i = 0; i < robot_.joints.size(); i++)
         {
             joint_origins.push_back(robot_.joints.at(i).JointOrigin());
-            ROS_INFO_STREAM("Joint name "<< robot_.joints.at(i).getName()<< " type: " <<robot_.joints.at(i).getType() << " origin: " << robot_.joint_origins[i].x());
-            ROS_INFO_STREAM("Joint origin "<< " X: " << robot_.joint_origins[i].x()<< " Y: " << robot_.joint_origins[i].y()<< " Z: " << robot_.joint_origins[i].z());
-
+            ROS_INFO_STREAM("Joint name "<< robot_.joints.at(i).getName()<< " type: " <<robot_.joints.at(i).getTypeName() << " origin: " );
         }
-#endif
+//#endif
         std::vector<KDL::Frame> F_previous;
         for (uint16_t i = 0; i < robot_.kinematic_chain.getNrOfSegments(); i++)
         {
