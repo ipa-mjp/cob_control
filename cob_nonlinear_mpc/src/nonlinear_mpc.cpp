@@ -60,8 +60,12 @@ void MPC::init()
 
     for(int i = 0; i < control_dim_; i++)
     {
+        ROS_INFO_STREAM("CONTROL DIM: "<<control_dim_);
         u_init_.push_back(0);
     }
+
+    previous_command.push_back(Eigen::VectorXd::Zero(state_dim_));
+    previous_command.push_back(Eigen::VectorXd::Zero(state_dim_));
 
     x_ = _fk_.getX();
     u_ = _fk_.getU();
@@ -72,6 +76,15 @@ void MPC::init()
     ROS_WARN_STREAM("MPC initialized");
 }
 
+void MPC::set_coordination_weights(vector<double> masses){
+    ROS_INFO("Setting weights");
+    ROS_INFO_STREAM("Mass size"<<masses.size()<< " control size " <<u_.size());
+    R.resize(masses.size(),1);
+    for(int i=0;i<masses.size();i++){
+        R(i)=u_(i)*masses.at(i);
+    }
+    ROS_INFO("Done Setting weights");
+}
 int MPC::get_num_shooting_nodes(){
     return this->num_shooting_nodes_;
 }
@@ -106,13 +119,14 @@ void MPC::set_input_constraints(vector<double> input_constraints_min,vector<doub
     // ToDo
     u_min =  this->input_constraints_min_;
     u_max  = this->input_constraints_max_;
+
+    ROS_INFO("Bounds and initial guess for the state");
+
     x_min  = this->state_path_constraints_min_;
     x_max  = this->state_path_constraints_max_;
     xf_min = this->state_terminal_constraints_min_;
     xf_max = this->state_terminal_constraints_max_;
 }
-
-
 
 Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state)
 {
@@ -122,31 +136,17 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     ROS_INFO_STREAM("input_constraints_max_: " <<this->input_constraints_max_.size());
 #endif
 
-    x0_min.clear();
-    x0_max.clear();
-    x_init.clear();
-
-    for(unsigned int i=0; i < state.rows();i++)
-    {
-        x0_min.push_back(state(i));
-        x0_max.push_back(state(i));
-        x_init.push_back(state(i));
-    }
-    x_open_loop_.at(0) = x_init;
-
     //ROS_INFO("ODE right hand side and quadrature");
     SX qdot = SX::vertcat({u_});
 
     //ROS_INFO("Current Quaternion and Position Vector.");
 
-    double kappa = 0.001; // Small regulation term for numerical stability for the NLP
-
-     SX q_c = SX::vertcat({
-         0.5 * sqrt(fk_(0,0) + fk_(1,1) + fk_(2,2) + 1.0 + kappa),
-         0.5 * (sign((fk_(2,1) - fk_(1,2)))) * sqrt(fk_(0,0) - fk_(1,1) - fk_(2,2) + 1.0 + kappa),
-         0.5 * (sign((fk_(0,2) - fk_(2,0)))) * sqrt(fk_(1,1) - fk_(2,2) - fk_(0,0) + 1.0 + kappa),
-         0.5 * (sign((fk_(1,0) - fk_(0,1)))) * sqrt(fk_(2,2) - fk_(0,0) - fk_(1,1) + 1.0 + kappa)
- });
+    q_c = SX::vertcat({ //current quaternion
+        0.5 * sqrt(fk_(0,0) + fk_(1,1) + fk_(2,2) + 1.0),
+        0.5 * ((fk_(2,1) - fk_(1,2))) / sqrt(fk_(0,0) + fk_(1,1) + fk_(2,2) + 1.0),
+        0.5 * ((fk_(0,2) - fk_(2,0))) / sqrt(fk_(1,1) + fk_(2,2) + fk_(0,0) + 1.0),
+        0.5 * ((fk_(1,0) - fk_(0,1))) / sqrt(fk_(2,2) + fk_(0,0) + fk_(1,1) + 1.0)
+    });
 
     pos_c = SX::vertcat({fk_(0,3), fk_(1,3), fk_(2,3)}); //current state
 
@@ -154,33 +154,54 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     pos_target = SX::vertcat({pose.position.x, pose.position.y, pose.position.z});
     q_target = SX::vertcat({pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z});
 
+    // Prevent collision with Base_link
+    SX barrier;
+    SX dist;
+
     // Get orientation error
     SX q_c_inverse = SX::vertcat({q_c(0), -q_c(1), -q_c(2), -q_c(3)});
     SX e_quat= quaternion_product(q_c_inverse,q_target);
     SX error_attitute = SX::vertcat({ e_quat(1), e_quat(2), e_quat(3)});
+    SX q = SX::vertcat({e_quat(0), e_quat(1), e_quat(2),e_quat(3)});
+    Function qk = Function("e_quat", {x_}, {q});
+    vector<double> x;
+    for(unsigned int i=0; i < state.rows();i++)
+    {
+        x.push_back(state(i));
+    }
+    SX test_v = qk(SX::vertcat({x})).at(0);
 
-    // L2 norm of the control signal
-    SX R = 1*SX::vertcat({100, 100, 100, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
-    SX energy = dot(sqrt(R)*u_,sqrt(R)*u_);
+    //ROS_INFO("L2 norm of the control signal");
+    ROS_INFO_STREAM("ATTITUDE ERROR: " << (double)test_v(0) <<" " << (double)test_v(1) <<" "<< (double)test_v(2) <<" "<< (double)test_v(3));
+    this->acceleration_coordination(state);
+    //R.print(std::cout);
 
-    // L2 norm of the states
-//    std::vector<int> state_convariance(state_dim_,1);
-//    SX S = 0.01*SX::scalar_matrix(state_dim_,1,1);
-//    SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
+    SX energy = SX::dot(R,u_);
+    energy.print(std::cout);
+
+    /*ROS_INFO("L2 norm of the states");
+    std::vector<int> state_convariance(state_dim_,1);
+    SX S = 0.01*SX(state_convariance);
+    SX motion = dot(sqrt(S)*x_,sqrt(S)*x_);
+     */
 
     SX error=pos_c-pos_target;
 
-    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy + 10 * dot(error_attitute,error_attitute) + bv_.getOutputConstraints();
-    SX phi = 100*dot(pos_c-pos_target,pos_c-pos_target) + 100 * dot(error_attitute,error_attitute);
+    barrier = bv_.getOutputConstraints();
+    ROS_INFO("Objective");
+    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy + 10 * dot(error_attitute,error_attitute)+barrier;
+    //SX phi = 100*dot(pos_c-pos_target,pos_c-pos_target) + 100 * dot(error_attitute,error_attitute);
 
-    //ROS_INFO("Create Euler integrator function");
+    ROS_INFO("Create Euler integrator function");
     Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
-    Function F_terminal = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, phi);
+
+    //Function F_terminal = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, phi);
+
 
     // Offset in V
     int offset=this->init_shooting_node();
 
-    //ROS_INFO("(Make sure that the size of the variable vector is consistent with the number of variables that we have referenced");
+    ROS_INFO("(Make sure that the size of the variable vector is consistent with the number of variables that we have referenced");
     casadi_assert(offset==NV);
 
     // Objective function
@@ -189,7 +210,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     //Constraint function and bounds
     vector<MX> g;
 
-    //ROS_INFO("Loop over shooting nodes");
+    ROS_INFO("Loop over shooting nodes");
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
         // Create an evaluation node
@@ -201,131 +222,138 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
         // Add objective function contribution
         J += I_out.at("qf");
     }
-
     // Terminal cost
-    MXDict I_term = F_terminal( MXDict{ {"x0", X[num_shooting_nodes_-1]}, {"p", U[num_shooting_nodes_-1]} });
-    J += I_term.at("qf");
+    // Create an evaluation node
+    //MXDict I_term = F_terminal( MXDict{ {"x0", X[num_shooting_nodes_-1]}, {"p", U[num_shooting_nodes_-1]} });
+    //J += I_term.at("qf");
 
+    ROS_INFO("NLP");
     MXDict nlp = {{"x", V}, {"f", J}, {"g", vertcat(g)}};
 
     // Set options
     Dict opts;
 
-    opts["ipopt.tol"] = 1e-4;
-    opts["ipopt.max_iter"] = 20;
+    opts["ipopt.tol"] = 1e-5;
+    opts["ipopt.max_iter"] = 10;
 //    opts["ipopt.hessian_approximation"] = "limited-memory";
 //    opts["ipopt.hessian_constant"] = "yes";
     opts["ipopt.linear_solver"] = "ma27";
     opts["ipopt.print_level"] = 0;
-    opts["print_time"] = true;
-    opts["expand"] = true;  // Removes overhead
+    opts["print_time"] = false;
+    opts["expand"] = false;  // Removes overhead
+
+    ros::Time time = ros::Time::now();
 
     Function solver = nlpsol("nlpsol", "ipopt", nlp, opts);
 
     std::map<std::string, DM> arg, res;
 
-    arg["lbx"] = v_min;
-    arg["ubx"] = v_max;
+    arg["lbx"] = min_state;
+    arg["ubx"] = max_state;
     arg["lbg"] = 0;
     arg["ubg"] = 0;
-    arg["x0"] = v_init;
+    arg["x0"] = init_state;
 
     res = solver(arg);
 
+    ros::Time time_new = ros::Time::now();
+
+    ROS_INFO_STREAM("NLP time: " << (time_new - time).toSec());
     // Optimal solution of the NLP
     vector<double> V_opt(res.at("x"));
-
-    V_opt_ = V_opt;
     vector<double> J_opt(res.at("f"));
 
     Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(state_dim_);
 
     SX sx_x_new;
+    u_open_loop_.clear();
+    x_open_loop_.clear();
     x_new.clear();
 
     for(int i=0; i<1; ++i)  // Copy only the first optimal control sequence
     {
         for(int j=0; j<control_dim_; ++j)
         {
-            q_dot[j] = V_opt_.at(state_dim_ + j);
-            x_new.push_back(V_opt_.at(j));
+            q_dot[j] = V_opt.at(state_dim_ + j);
+            x_new.push_back(V_opt.at(j));
         }
     }
-
-    // Plot bounding volumes
     sx_x_new = SX::vertcat({x_new});
+
+    // Safe optimal control sequence at time t_k and take it as inital guess at t_k+1
+
     bv_.plotBoundingVolumes(sx_x_new);
 
-    KDL::Frame ef_pos = forward_kinematics(state);
+    //KDL::Frame ef_pos = forward_kinematics(state);
 
-    // Prepare states and controls for next control loop
-    shiftInit();
-
-    V_opt_.clear();
-    v_min.clear();
-    v_max.clear();
-    v_init.clear();
-
+    previous_command.push_back(q_dot);
     return q_dot;
 }
-
 int MPC::init_shooting_node()
 {
+    // Offset in V
+    int offset=0;
     X.clear();
     U.clear();
+    min_state.clear();
+    max_state.clear();
+    init_state.clear();
 
-    int offset = 0;
+    //THIS CAN BE SERIOULSY OPTIMISED
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
-        // Local state
+        //ROS_INFO("Local state");
         X.push_back( V.nz(Slice(offset,offset+state_dim_)));
-
-        vector<double> x_ol;
-        x_ol = x_open_loop_.at(k);
 
         if(k==0)
         {
-            v_min.insert(v_min.end(), x0_min.begin(), x0_min.end());
-            v_max.insert(v_max.end(), x0_max.begin(), x0_max.end());
+            min_state.insert(min_state.end(), x0_min.begin(), x0_min.end());
+            max_state.insert(max_state.end(), x0_max.begin(), x0_max.end());
         }
         else
         {
-            v_min.insert(v_min.end(), x_min.begin(), x_min.end());
-            v_max.insert(v_max.end(), x_max.begin(), x_max.end());
+            min_state.insert(min_state.end(), x_min.begin(), x_min.end());
+            max_state.insert(max_state.end(), x_max.begin(), x_max.end());
         }
-        v_init.insert(v_init.end(), x_ol.begin(), x_ol.end());
+        init_state.insert(init_state.end(), x_init.begin(), x_init.end());
         offset += state_dim_;
 
-        // Local control via shift initialization
+        //ROS_INFO("Local control via shift initialization");
         U.push_back( V.nz(Slice(offset,offset+control_dim_)));
-        v_min.insert(v_min.end(), u_min.begin(), u_min.end());
-        v_max.insert(v_max.end(), u_max.begin(), u_max.end());
+        min_state.insert(min_state.end(), u_min.begin(), u_min.end());
+        max_state.insert(max_state.end(), u_max.begin(), u_max.end());
 
-        vector<double> u_ol;
-        u_ol = u_open_loop_.at(k);
-
-        v_init.insert(v_init.end(), u_ol.begin(), u_ol.end());
+        init_state.insert(init_state.end(), u_init_.begin(), u_init_.end());
         offset += control_dim_;
     }
 
-    vector<double> x_ol;
-    x_ol = x_open_loop_.at(num_shooting_nodes_-1);
-    // State at end
+    ROS_INFO("State at end");
     X.push_back(V.nz(Slice(offset,offset+state_dim_)));
-    v_min.insert(v_min.end(), xf_min.begin(), xf_min.end());
-    v_max.insert(v_max.end(), xf_max.begin(), xf_max.end());
-    v_init.insert(v_init.end(), x_ol.begin(), x_ol.end());
-    offset += state_dim_;
+    min_state.insert(min_state.end(), xf_min.begin(), xf_min.end());
+    max_state.insert(max_state.end(), xf_max.begin(), xf_max.end());
+    init_state.insert(init_state.end(), u_init_.begin(), u_init_.end());
 
-    return offset;
+    x0_min.clear();
+    x0_max.clear();
+    x_init.clear();
+    return offset += state_dim_;
+}
+
+void MPC::acceleration_coordination(const KDL::JntArray& state){
+    Eigen::VectorXd acc = previous_command.at(1)-previous_command.at(0);
+    for(int i=0;i<control_dim_;i++){
+        R(i)=R(i)*acc[i]/time_horizon_;
+    }
+    ROS_INFO_STREAM("Acceleration: "<< acc);
+    previous_command.pop_back();
 }
 
 KDL::Frame MPC::forward_kinematics(const KDL::JntArray& state){
 
     KDL::Frame ef_pos; //POsition of the end effector
 
-
     Function fk = Function("fk_", {x_}, {pos_c});
+
     vector<double> x;
     for(unsigned int i=0; i < state.rows();i++)
     {
@@ -333,10 +361,13 @@ KDL::Frame MPC::forward_kinematics(const KDL::JntArray& state){
     }
     SX test_v = fk(SX::vertcat({x})).at(0);
     //SX test_base = fk_base(SX::vertcat({x_new})).at(0);
-
     ef_pos.p.x((double)test_v(0));
     ef_pos.p.y((double)test_v(1));
     ef_pos.p.z((double)test_v(2));
+    ROS_INFO_STREAM("Joint values:" << x);
+    ROS_WARN_STREAM("Current Position: \n" << ef_pos.p.x() << " "<< ef_pos.p.y() << " "<< ef_pos.p.z() << " ");
+    //ROS_WARN_STREAM("Base Position: \n" << (double)test_base(0) << " "<< (double)test_base(1) << " "<< (double)test_base(2) << " ");
+    ROS_WARN_STREAM("Target Position: \n" << pos_target);
     return ef_pos;
 }
 
@@ -391,45 +422,4 @@ void MPC::setBoundingVolumes(BoundingVolume &bv)
 void MPC::setForwardKinematics(ForwardKinematics &fk)
 {
     _fk_ = fk;
-}
-
-void MPC::shiftInit()
-{
-    vector<double> tmp;
-    u_open_loop_.clear();
-    x_open_loop_.clear();
-
-    // Prepare state guess for next loop
-    for(int k=1; k < num_shooting_nodes_; k++)
-    {
-        tmp.clear();
-
-        for(int i=0; i < state_dim_; i++)
-        {
-            tmp.push_back((double)V_opt_.at((k) * (state_dim_+control_dim_) + i));
-        }
-        x_open_loop_.push_back(tmp);
-
-        if(k == num_shooting_nodes_-1)
-        {
-            x_open_loop_.push_back(tmp);
-        }
-    }
-
-    // Prepare control input guess for next loop
-    for(int k=1; k < num_shooting_nodes_; k++)
-    {
-        tmp.clear();
-
-        for(int i=0; i < control_dim_; i++)
-        {
-            tmp.push_back((double)V_opt_.at((k+1) * (state_dim_+control_dim_) + (i-control_dim_)));
-        }
-        u_open_loop_.push_back(tmp);
-
-        if(k == num_shooting_nodes_-1)
-        {
-            u_open_loop_.push_back(tmp);
-        }
-    }
 }

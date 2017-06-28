@@ -54,6 +54,8 @@ struct Robot
     std::vector<KDL::Segment> forward_kinematics;
     bool base_active_;
     std::unordered_map<std::string, std::vector<std::string> > self_collision_map_;
+    std::string root_frame;
+    vector<double> masses;
 };
 
 #endif  // NONLINEAR_MPC_H

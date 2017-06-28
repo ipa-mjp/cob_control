@@ -56,6 +56,15 @@ bool CobNonlinearMPC::initialize()
         ROS_ERROR("Parameter 'joint_names' not set");
         return false;
     }
+
+    if(!nh_.getParam("root_frame", root_frame_))
+    {
+        ROS_ERROR("Parameter 'root_frame' not set");
+        return false;
+    }
+
+    robot_.root_frame = root_frame_;
+
     // nh_nmpc
     int num_shooting_nodes;
     if (!nh_nmpc.getParam("shooting_nodes", num_shooting_nodes))
@@ -228,6 +237,7 @@ bool CobNonlinearMPC::initialize()
     mpc_ctr_->setBoundingVolumes(bv);
     mpc_ctr_->setForwardKinematics(fk);
     mpc_ctr_->init();
+    mpc_ctr_->set_coordination_weights(robot_.masses);
 
     joint_state_ = KDL::JntArray(robot_.kinematic_chain.getNrOfJoints());
     jointstate_sub_ = nh_.subscribe("joint_states", 1, &CobNonlinearMPC::jointstateCallback, this);
@@ -250,7 +260,13 @@ void CobNonlinearMPC::FrameTrackerCallback(const geometry_msgs::Pose::ConstPtr& 
 {
     KDL::JntArray state = getJointState();
 
+    ros::Time time = ros::Time::now();
+
     Eigen::MatrixXd qdot = mpc_ctr_->mpc_step(*msg, state);
+
+    ros::Time time_new = ros::Time::now();
+
+    ROS_INFO_STREAM("mpc time: " << (time_new - time).toSec());
 
     geometry_msgs::Twist base_vel_msg;
     std_msgs::Float64MultiArray vel_msg;

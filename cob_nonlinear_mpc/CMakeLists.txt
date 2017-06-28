@@ -21,9 +21,6 @@ find_package(IPOPT REQUIRED)
 
 message("-- Found Ceres version ${CERES_VERSION}: ${CERES_INCLUDE_DIRS}")
 
-catkin_python_setup()
-
-
 catkin_package(
   CATKIN_DEPENDS cob_control_msgs cob_srvs eigen_conversions geometry_msgs kdl_conversions kdl_parser nav_msgs pluginlib roscpp sensor_msgs std_msgs tf tf_conversions urdf visualization_msgs
   DEPENDS Boost CERES

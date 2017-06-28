@@ -57,6 +57,8 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/shared_ptr.hpp>
 
+#include <Eigen/Core>
+
 using namespace casadi;
 using namespace std;
 
@@ -64,24 +66,24 @@ class MPC
 {
 private:
 
-    ros::NodeHandle nh_;
-    BoundingVolume bv_;
-    ForwardKinematics _fk_;
-
     int num_shooting_nodes_;
     double time_horizon_;
     int state_dim_;
     int control_dim_;
     int NV;
 
-    vector<vector<double>> u_open_loop_, x_open_loop_;
+    vector<vector<double>> u_open_loop_;
+    vector<vector<double>> x_open_loop_;
 
-    vector<double> u_min, u_max;
-    vector<double> x_min, x_max;
-    vector<double> xf_min, xf_max;
+    vector<double> u_min;
+    vector<double> u_max;
+
+    vector<double> x_min;
+    vector<double> x_max;
+    vector<double> xf_min;
+    vector<double> xf_max;
+
     vector<double> u_init_;
-
-
     // Symbolic variables
     SX u_; //control symbolic input
     SX x_; //robot symbolic state
@@ -89,17 +91,27 @@ private:
     SX pos_c ;//Current cartesian position
     SX pos_target; //Target position
     SX q_target; //target quaternion orientation
-    SX fk_; //Forward kinematics
 
+    SX fk_; //Forward kinematics
+    SX fk_base_; //Base Forward kinematics
+    std::vector<SX> fk_vector_; // Forward kinematics for each link
+
+    // State at each shooting node and control for each shooting interval
     // Declare variable vector for the NLP
     MX V ;
     vector<MX> X, U;
-    vector<double> v_min,v_max,v_init;
+    // NLP variable bounds and initial guess
+    vector<double> min_state,max_state,init_state;
 
-    vector<double> x_new;
+    vector<double> x_new; //new state after computation
 
-    // Optimized NLP
-    vector<double> V_opt_;
+    ros::NodeHandle nh_;
+
+    //COORDINATION
+    Eigen::MatrixXd weiting;
+
+    BoundingVolume bv_;
+    ForwardKinematics _fk_;
 
 public:
     MPC(int num_shooting_nodes,double time_horizon ,int state_dim,int control_dim)
@@ -120,21 +132,29 @@ public:
     vector<double> x0_max;
     vector<double> x_init;
 
+    SX R ;
+    vector<Eigen::VectorXd> previous_command;
+
     // Base function
     Eigen::MatrixXd mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state);
     void init();
 
-    // Helper
     int get_num_shooting_nodes();
+
     double get_time_horizon();
+
     int get_state_dim();
+
     int get_control_dim();
 
     void set_path_constraints(vector<double> state_path_constraints_min,vector<double> state_path_constraints_max);
+
     void set_state_constraints(vector<double> state_terminal_constraints_min,vector<double> state_terminal_constraints_max);
+
     void set_input_constraints(vector<double> input_constraints_min,vector<double> input_constraints_max);
 
     SX quaternion_product(SX q1, SX q2);
+
     KDL::Frame forward_kinematics(const KDL::JntArray& state);
     Function create_integrator(const unsigned int state_dim, const unsigned int control_dim, const double T,
                                const unsigned int N, SX ode, SX x, SX u, SX L);
@@ -142,9 +162,12 @@ public:
     void setBoundingVolumes(BoundingVolume &bv);
     void setForwardKinematics(ForwardKinematics &fk);
 
+    void acceleration_coordination(const KDL::JntArray& state);
 
     int init_shooting_node();
-    void shiftInit();
+
+    void set_coordination_weights(vector<double> masses);
+
 };
 
 #endif  // NONLINEAR_MPC_H
