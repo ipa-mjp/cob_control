@@ -31,8 +31,8 @@
 void ForwardKinematics::symbolic_jacobian(Robot &robot){
     SX Jv_i = SX::vertcat({0,0,0});
     SX Jw_i = SX::vertcat({0,0,0});
-    KDL::Vector z0 = SX::vertcat({0,0,1});
-    KDL::Vector o0 = SX::vertcat({0,0,0});
+    SX z0 = SX::vertcat({0,0,1});
+    SX o0 = SX::vertcat({0,0,0});
     int end = fk_vector_.size();
     for(int i=0;i<robot.joint_frames.size();i++)
     {
@@ -43,25 +43,25 @@ void ForwardKinematics::symbolic_jacobian(Robot &robot){
 
         if(i==0){
             if(robot.kinematic_chain.getSegment(i).getJoint().getType()==0){ //ROTATIONAL JOINT
-                SX T_0_end = SX::vec({fk_vector_.at(end)(0,3),fk_vector_.at(end)(1,3),fk_vector_.at(end)(2,3)});
+                SX T_0_end = SX::vertcat({fk_vector_.at(end)(0,3),fk_vector_.at(end)(1,3),fk_vector_.at(end)(2,3)});
                 Jv_i = SX::cross(z0,T_0_end);
                 Jw_i=z0;
             }
             else{ // PRISMATIC JOINT
                 Jv_i = z0;
-                Jw_i=  SX::vercat({0,0,0});
+                Jw_i=  SX::vertcat({0,0,0});
             }
         }
         else{
             if(robot.kinematic_chain.getSegment(i).getJoint().getType()==0){ //ROTATIONAL JOINT
-                SX T_0_end = SX::vec({fk_vector_.at(end)(0,3),fk_vector_.at(end)(1,3),fk_vector_.at(end)(2,3)});
-                SX T_0_i = SX::vec({fk_vector_.at(i)(0,3),fk_vector_.at(i)(1,3),fk_vector_.at(i)(2,3)});
+                SX T_0_end = SX::vertcat({fk_vector_.at(end)(0,3),fk_vector_.at(end)(1,3),fk_vector_.at(end)(2,3)});
+                SX T_0_i = SX::vertcat({fk_vector_.at(i)(0,3),fk_vector_.at(i)(1,3),fk_vector_.at(i)(2,3)});
                 Jv_i = SX::cross(T_0_i,T_0_end-T_0_i);
-                Jw_i=SX::vec({fk_vector_.at(i)(0,2),fk_vector_.at(i)(1,2),fk_vector_.at(i)(2,2)});;
+                Jw_i=SX::vertcat({fk_vector_.at(i)(0,2),fk_vector_.at(i)(1,2),fk_vector_.at(i)(2,2)});;
             }
             else{ // PRISMATIC JOINT
-                Jv_i = SX::vec({fk_vector_.at(i)(0,2),fk_vector_.at(i)(1,2),fk_vector_.at(i)(2,2)});;;
-                Jw_i=  SX::vercat({0,0,0});
+                Jv_i = SX::vertcat({fk_vector_.at(i)(0,2),fk_vector_.at(i)(1,2),fk_vector_.at(i)(2,2)});;;
+                Jw_i=  SX::vertcat({0,0,0});
             }
         }
     }
@@ -89,7 +89,7 @@ void ForwardKinematics::symbolic_fk(Robot &robot)
         KDL::Rotation rot;
         rot=robot.joint_frames.at(i).M;
         pos=robot.joint_frames.at(i).p;
-
+        robot.joints.at(i).getTypeName();
         if(robot.base_active_)
         { // if base active first initial control variable belong to the base
         // here each joint is considered to be revolute.. code needs to be updated for prismatic
