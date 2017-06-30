@@ -1,8 +1,12 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="paused" default="false"/>
-  <arg name="gui" default="true"/>
 
+    <!-- args -->
+    <arg name="robot" value="lwa4p_extended"/>
+    <arg name="paused" default="false"/>
+    <arg name="gui" default="true"/>
+    <arg name="sim" default="false"/>
+    
   <!-- start gazebo with empty world -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="paused" value="$(arg paused)" />
@@ -21,17 +25,16 @@
       <param name="tf_prefix" type="string" value="" />
   </node>
 	
-	<!-- fake Calibration and HW-Services -->
-  	<node pkg="rostopic" type="rostopic" name="fake_joint_calibration" args="pub /calibrated std_msgs/Bool true" />
-  	<node ns="arm" pkg="cob_helper_tools" type="fake_driver.py" name="fake_driver" cwd="node" respawn="false" output="screen"/>
+  	 <node ns="arm" name="joint_states_relay" pkg="topic_tools" type="relay" args="joint_states /joint_states" cwd="node" respawn="true" output="screen"/>
   	
+  	<!--
 	<include file="$(find cob_bringup)/controllers/generic_controller.launch">
 		<arg name="robot" value="lwa4p_extended"/>
 		<arg name="component_name" value="arm"/>
 		<arg name="pkg_hardware_config" value="$(find schunk_lwa4p_extended)"/>
 	</include>
 	
-	<node ns="arm" name="joint_states_relay" pkg="topic_tools" type="relay" args="joint_states /joint_states" cwd="node" respawn="true" output="screen"/>
+
 
   <include file="$(find cob_bringup)/controllers/generic_cartesian_controller.launch">
     <arg name="component_name" value="arm" />
@@ -39,6 +42,16 @@
     <arg name="nmpc_control" value="true"/>
     <arg name="pkg_hardware_config" value="$(find schunk_lwa4p_extended)"/>
   </include>
+-->
+        <include file="$(find cob_bringup)/components/canopen_generic.launch">
+            <arg name="robot" value="$(arg robot)"/>
+            <arg name="component_name" value="arm"/>
+            <arg name="can_device" value="can3"/>
+            <arg name="sim" value="$(arg sim)"/>
+            <arg if="$(arg sim)" name="cartesian_control" value="true"/>
+            <arg if="$(arg sim)" name="twist_control" value="false"/>
+            <arg if="$(arg sim)" name="nmpc_control" value="true"/>
+        </include>
   
     <!--<node name="visualization" pkg="rviz" type="rviz" output="screen" />  -->
   

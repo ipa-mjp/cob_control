@@ -143,6 +143,10 @@ void BoundingVolume::generate_bounding_volumes()
             bv_mat["body"].push_back(base_bvh);
         }
     }
+    std::vector<SX> floor_plane;
+    SX tmp = SX::vertcat({0, 0, 0});
+    floor_plane.push_back(tmp);
+    bv_mat["floor"].push_back(floor_plane);
 }
 
 SX BoundingVolume::getOutputConstraints()
@@ -184,16 +188,34 @@ SX BoundingVolume::getOutputConstraints()
                     SX p1 = SX::vertcat({p1_vec.at(0)});
                     SX p2 = SX::vertcat({p2_vec.at(0)});
 
-                    dist = dot(p1 - p2, p1 - p2);
-
-                    if(counter == 0)
+                    if(it_scm->first == "floor")
                     {
-                        barrier = exp((bv_radius - sqrt(dist))/0.01);
-                        counter = 1;
+                        p2 = SX::vertcat({0, 0, p2(2)});
+                        dist = dot(p1 - p2, p1 - p2);
+
+                        if(counter == 0)
+                        {
+                            barrier = exp((0.3 - sqrt(dist))/0.01);
+                            counter = 1;
+                        }
+                        else
+                        {
+                            barrier += exp((0.3 - sqrt(dist))/0.01);
+                        }
                     }
                     else
                     {
-                        barrier += exp((bv_radius - sqrt(dist))/0.01);
+                        dist = dot(p1 - p2, p1 - p2);
+
+                        if(counter == 0)
+                        {
+                            barrier = exp((bv_radius - sqrt(dist))/0.01);
+                            counter = 1;
+                        }
+                        else
+                        {
+                            barrier += exp((bv_radius - sqrt(dist))/0.01);
+                        }
                     }
                 }
             }
