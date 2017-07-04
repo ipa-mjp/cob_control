@@ -84,4 +84,5 @@ class OdometrySubscriber(Subscriber):
         self.init_ = True
         self.odometry_sub_ = None
     def callback(self, data):
-        print("HELLO")
+        self.data = data
+        print("odometry")
