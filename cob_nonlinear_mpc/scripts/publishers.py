@@ -51,10 +51,10 @@ class Publisher(object):
         self.data_class_ = data_class
         self.publisher_ = None
         self.start_ = None
-
+        self.queue_size = 100.0
     def open(self):
         success = True
-        self.publisher_ = rospy.Publisher(self.topic_name_, self.data_class_)
+        self.publisher_ = rospy.Publisher(self.topic_name_, self.data_class_,queue_size=self.queue_size)
         return success
 
     @abc.abstractmethod

@@ -35,6 +35,17 @@ from subscribers import JointStateSubscriber
 from subscribers import OdometrySubscriber
 from publishers import JointStatePublisher
 from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import MultiArrayDimension
+import threading
+
+rate = rospy.Rate(10)  # 10hz
+
+def loop(self):
+    self.engine.startLoop(False)
+    while not rospy.is_shutdown():
+        self.engine.iterate()
+        rate.sleep()
+    self.engine.endLoop()
 
 if __name__ == '__main__':
     rospy.init_node('listener', anonymous=True)
@@ -42,11 +53,15 @@ if __name__ == '__main__':
     joint_sub.open()
     odometry_sub=OdometrySubscriber('/base/odometry_controller/odometry')
 
+    lock = thread.allocate_lock()
+
     joint_pub = JointStatePublisher('/arm/joint_group_velocity_controller/command')
-    q=Float64MultiArray
-    q.data=np.array([1,1,1,1,1,1])
-    for i in range(1,1,1):
+
+    joint_pub.open()
+    lock.acquire()  # will block if lock is already held
+
+        lock.release()
+        q = Float64MultiArray()
+        q.data=joint_sub.data.velocity
+        lock.acquire()  # will block if lock is already held
         joint_pub.publish(q)
-        rospy.sleep(1)
-        i=i+1
-    rospy.spin()

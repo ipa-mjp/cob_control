@@ -54,7 +54,7 @@ class Subscriber(object):
         self.data_class_ = data_class
         self.subscriber_ = None
         self.start_ = None
-
+        self.data = data_class()
     def open(self):
         success = True
         self.subscriber_ = rospy.Subscriber(self.topic_name_, self.data_class_, self.callback)
@@ -74,12 +74,8 @@ class JointStateSubscriber(Subscriber):
         self.jointstate_sub_ = None
 
     def callback(self, data):
-        header = []
-        for name in data.name:
-            header.append(name + '_position')
-        for name in data.name:
-            header.append(name + '_velocity')
-        print(header)
+        self.data=data
+        print("HELLO")
 
 class OdometrySubscriber(Subscriber):
 
