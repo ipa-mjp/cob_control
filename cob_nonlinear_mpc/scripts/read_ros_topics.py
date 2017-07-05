@@ -30,12 +30,13 @@ import rospy
 import numpy as np
 from std_msgs.msg import String
 from sensor_msgs.msg import JointState
-import threading
+import multiprocessing
 from subscribers import JointStateSubscriber
 from subscribers import OdometrySubscriber
 from publishers import JointStatePublisher
 from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import MultiArrayDimension
+import thread
 
 from mpc import *
 
@@ -44,24 +45,34 @@ joint_pub = JointStatePublisher('/arm/joint_group_velocity_controller/command')
 q = Float64MultiArray()
 
 def loop():
-    rate = rospy.Rate(10)  # 10hz
-    joint_pub.open()
-    controller = MPC(ns="arm")
+    rate = rospy.Rate(100)  # 10hz
+    #joint_pub.open()
+    #controller = MPC(ns="arm")
     while not rospy.is_shutdown():
-        joint_pub.publish(q)
+        #joint_pub.publish(q)
+        print("publising")
+        rate.sleep()
+
+def loop2():
+    rate = rospy.Rate(100)  # 10hz
+    while not rospy.is_shutdown():
+        print('thread 2')
         rate.sleep()
 
 if __name__ == '__main__':
     rospy.init_node('listener', anonymous=True)
-
 
     joint_sub = JointStateSubscriber('/arm/joint_states')
     joint_sub.open()
 
     odometry_sub=OdometrySubscriber('/base/odometry_controller/odometry')
     odometry_sub.open()
-
-    lock = threading.Thread(target=loop())
     q.data=joint_sub.data.velocity
-    lock.start()
+    # Create two threads as follows
+    try:
+        thread.start_new_thread(loop, ())
+        thread.start_new_thread(loop2, ())
+    except:
+        print "Error: unable to start thread"
 
+    rospy.spin()

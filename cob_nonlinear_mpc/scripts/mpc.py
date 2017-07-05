@@ -30,6 +30,7 @@ from setuptools.command.saveopts import saveopts
 
 import rospy
 import matplotlib.pyplot as plt
+import multiprocessing
 import threading
 
 class StateConstraints:
@@ -59,8 +60,8 @@ class MPC(object):
         self.tracking_frame = ""
         self.init(ns)
         self.rate = rospy.Rate(10)  # 10hz
-        self.thread = threading.Thread(target=self.mpc_step())
-        self.thread.start()
+        self.thread = multiprocessing.Process(name="mpc",target=self.mpc_step())
+        self.thread = threading.RLock()
 
     def init(self, ns):
         if rospy.has_param(ns + '/joint_names'):
