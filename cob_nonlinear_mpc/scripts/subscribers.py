@@ -38,6 +38,8 @@ from geometry_msgs.msg import TwistStamped
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 import tf
+from geometry_msgs.msg import Pose
+import numpy as np
 
 class Subscriber(object):
     """ROS Pzthon subscriber abstract class
@@ -71,18 +73,44 @@ class JointStateSubscriber(Subscriber):
     def __init__(self, topic_name):
         super(JointStateSubscriber, self).__init__(topic_name, JointState)
         self.init_ = True
-        self.jointstate_sub_ = None
+        self.joint_positions_ = []
+        self.joint_velocities_ = []
+        self.data = JointState()
 
     def callback(self, data):
         self.data=data
-        print("HELLO")
+        self.joint_positions_ = data.position
+        self.joint_velocities_ = data.velocity
+        rospy.loginfo('joint states')
 
 class OdometrySubscriber(Subscriber):
 
     def __init__(self, topic_name):
         super(OdometrySubscriber, self).__init__(topic_name, Odometry)
         self.init_ = True
-        self.odometry_sub_ = None
+        self.base_position_ = Odometry().pose.pose.position
+        self.base_orientation_ = Odometry().pose.pose.orientation
+        self.joint_pos_ = np.array([0,0,0])
+
+    def callback(self, data):
+        self.base_position_ = data.pose.pose.position
+        self.base_orientation_ = data.pose.pose.orientation
+        self.convert_orientation_to_joint_pos()
+        rospy.loginfo('odometry')
+
+    def convert_orientation_to_joint_pos(self):
+        #Conversion from quaternion to joint angle
+        ysqr = self.base_orientation_.y * self.base_orientation_.y
+        t3 = 2.0 * (self.base_orientation_.w * self.base_orientation_.z + self.base_orientation_.x * self.base_orientation_.y)
+        t4 = 1.0 - 2.0 * (ysqr + self.base_orientation_.z * self.base_orientation_.z)
+        self.joint_pos_ = np.array([self.base_position_.x, self.base_position_.y, np.arctan2(t3, t4)])
+
+class FrameTrackerSubscriber(Subscriber):
+
+    def __init__(self, topic_name):
+        super(FrameTrackerSubscriber, self).__init__(topic_name, Pose)
+        self.init_ = True
+        self.frame_tracker_sub_ = None
+        self.ref = Pose()
     def callback(self, data):
         self.data = data
-        print("odometry")

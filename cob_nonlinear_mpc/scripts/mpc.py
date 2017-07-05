@@ -31,7 +31,8 @@ from setuptools.command.saveopts import saveopts
 import rospy
 import matplotlib.pyplot as plt
 import multiprocessing
-import threading
+import thread
+import numpy as np
 
 class StateConstraints:
     path_constraints_min = 0.0
@@ -58,10 +59,10 @@ class MPC(object):
         self.chain_tip_link = ""
         self.chain_base_link = ""
         self.tracking_frame = ""
+        self.join_state_ = np.zeros((self.state_dim,1))
         self.init(ns)
-        self.rate = rospy.Rate(10)  # 10hz
-        self.thread = multiprocessing.Process(name="mpc",target=self.mpc_step())
-        self.thread = threading.RLock()
+        self.rate = rospy.Rate(100)  # 10hz
+        self.thread = None
 
     def init(self, ns):
         if rospy.has_param(ns + '/joint_names'):
@@ -144,7 +145,12 @@ class MPC(object):
             exit(-2)
         rospy.loginfo("MPC Initialized...")
 
-    def mpc_step(self):
+    def mpcStep(self):
         while not rospy.is_shutdown():
             print("MPC_step")
             self.rate.sleep()
+        thread.exit_thread()
+
+    def spin(self):
+        self.thread=thread.start_new_thread(name="mpc", target=self.mpcStep())
+        return

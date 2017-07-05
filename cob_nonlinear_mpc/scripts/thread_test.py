@@ -1,28 +1,33 @@
 #!/usr/bin/python
 
 import thread
-import time
+import rospy
 
-# Define a function for the thread
-def print_time( threadName, delay):
-   count = 0
-   while count < 5:
-      time.sleep(delay)
-      count += 1
-      print "%s: %s" % ( threadName, time.ctime(time.time()) )
+joint_pub = JointStatePublisher('/arm/joint_group_velocity_controller/command')
+q = Float64MultiArray()
 
-def print_time2(threadName, delay):
-   count = 0
-   while count < 5:
-       time.sleep(delay)
-       count += 1
-       print "%s: %s" % (threadName, time.ctime(time.time()))
-# Create two threads as follows
-try:
-   thread.start_new_thread( print_time, ("Thread-1", 2, ) )
-   thread.start_new_thread( print_time2, ("Thread-2", 4, ) )
-except:
-   print "Error: unable to start thread"
+def loop():
+    rate = rospy.Rate(100)  # 10hz
+    joint_pub.open()
+    while not rospy.is_shutdown():
+        #joint_pub.publish(q)
+        print("publising")
+        rate.sleep()
+    thread.exit_thread()
 
-while 1:
-   pass
+def loop2():
+    rate = rospy.Rate(100)  # 10hz
+    while not rospy.is_shutdown():
+        print('thread 2')
+        rate.sleep()
+    thread.exit_thread()
+
+if __name__ == '__main__':
+    rospy.init_node('listener', anonymous=True)
+
+    # Create two threads as follows
+    try:
+        thread.start_new_thread(loop, ())
+        thread.start_new_thread(loop2, ())
+    except:
+        print "Error: unable to start thread"
