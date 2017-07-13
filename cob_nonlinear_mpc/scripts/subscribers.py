@@ -104,6 +104,7 @@ class OdometrySubscriber(Subscriber):
         t3 = 2.0 * (self.base_orientation_.w * self.base_orientation_.z + self.base_orientation_.x * self.base_orientation_.y)
         t4 = 1.0 - 2.0 * (ysqr + self.base_orientation_.z * self.base_orientation_.z)
         self.joint_pos_ = np.array([self.base_position_.x, self.base_position_.y, np.arctan2(t3, t4)])
+        return
 
 class FrameTrackerSubscriber(Subscriber):
 

@@ -1,0 +1,11 @@
+Variables 
+  x1 > 0 , < 5  ! Product 1 
+  x2 > 0 , < 4  ! Product 2 
+  profit 
+ 
+Equations 
+  ! profit function 
+  maximize profit   
+  profit = 100 * x1 + 125 * x2 
+  3 * x1 + 6 * x2 <= 30 
+  8 * x1 + 4 * x2 <= 44         

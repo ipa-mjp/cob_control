@@ -41,7 +41,7 @@ class CobMPC(object):
     def __init__(self, ns):
         self.odometry_sub = OdometrySubscriber('/base/odometry_controller/odometry')
         self.joint_sub = JointStateSubscriber('/arm/joint_states')
-        self.controller = MPC(ns=ns)
+        self.controller = MPC(ns=ns,urdf_file=None)
         self.thread = None
         self.rate= rospy.Rate(100)  # 10hz
 
@@ -49,16 +49,17 @@ class CobMPC(object):
         self.thread = thread.start_new_thread(name="cob_mpc", target=self.loop())
 
     def loop(self):
+        rospy.loginfo('cob_mpc loop')
         self.joint_sub.open()
-        self.odometry_sub.open()
-        #self.controller.spin()
+        if self.controller.base_active:
+            self.odometry_sub.open()
         while not rospy.is_shutdown():
             self.getJointState()
+            self.controller.mpcStep()
+            rospy.loginfo('cob_mpc loop')
             self.rate.sleep()
             pass
-        self.controller.thread.exit_thread()
         self.thread.thread.exit_thread()
-        rospy.loginfo('cob_mpc loop')
         return
 
     def getJointState(self):

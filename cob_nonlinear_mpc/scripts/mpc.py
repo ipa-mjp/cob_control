@@ -30,9 +30,15 @@ from setuptools.command.saveopts import saveopts
 
 import rospy
 import matplotlib.pyplot as plt
-import multiprocessing
+from casadi import *
 import thread
 import numpy as np
+import PyKDL
+from urdf_parser_py.urdf import URDF
+import PyKDL
+from kdl_parser_py.urdf import treeFromUrdfModel
+from urdf_parser_py.urdf import Robot
+from kinematics import KinematicChain
 
 class StateConstraints:
     path_constraints_min = 0.0
@@ -48,7 +54,7 @@ class StateConstraints:
 
 class MPC(object):
 
-    def __init__(self, ns):
+    def __init__(self, ns,urdf_file):
         self.joint_names = []
         self.shooting_nodes = 0
         self.time_horizon = 0.0
@@ -60,11 +66,27 @@ class MPC(object):
         self.chain_base_link = ""
         self.tracking_frame = ""
         self.join_state_ = np.zeros((self.state_dim,1))
-        self.init(ns)
+
         self.rate = rospy.Rate(100)  # 10hz
         self.thread = None
+        #SYBOLIC VARIABLES
+        self.x = SX.sym("x")
 
-    def init(self, ns):
+        #KDL
+        self.robot = None
+        self.kdl_kin = None
+
+        self.init(ns, urdf_file)
+
+    def init(self, ns, urdf_file):
+
+        if urdf_file is None:
+            self.robot = Robot.from_parameter_server(key='robot_description')
+        else:
+            fileObj = file(urdf_file, 'r')
+            self.robot = Robot.from_xml_string(fileObj.read())
+            fileObj.close()
+
         if rospy.has_param(ns + '/joint_names'):
             self.joint_names = rospy.get_param(ns + '/joint_names')
         else:
@@ -143,14 +165,39 @@ class MPC(object):
         else:
             rospy.logwarn('Could not find parameter frame_tracker/target_frame.')
             exit(-2)
+
+        self.kdl_kin = KinematicChain(self.robot, base_link=self.chain_base_link, end_link=self.chain_tip_link)
+
         rospy.loginfo("MPC Initialized...")
 
     def mpcStep(self):
-        while not rospy.is_shutdown():
-            print("MPC_step")
-            self.rate.sleep()
-        thread.exit_thread()
+        print("MPC_step")
+        self.kdl_kin.write_to_list()
 
     def spin(self):
         self.thread=thread.start_new_thread(name="mpc", target=self.mpcStep())
         return
+
+    def symbolic_fk(self):
+        T = SX.sym("T", 4, 4)
+        if self.base_active:
+            T[0, 0] = cos(self.x(2))
+            T[0, 1] = -sin(self.x(2))
+            T[0, 2] = 0.0
+            T[0, 3] = self.x(0)
+            T[1, 0] = sin(self.x(2))
+            T[1, 1] = cos(self.x(2))
+            T[1, 2] = 0.0
+            T[1, 3] = self.x(1)
+            T[2, 0] = 0.0
+            T[2, 1] = 0.0
+            T[2, 2] = 1.0
+            T[2, 3] = 0
+            T[3, 0] = 0.0
+            T[3, 1] = 0.0
+            T[3, 2] = 0.0
+            T[3, 3] = 1.0
+            T_base_ = T
+
+
+

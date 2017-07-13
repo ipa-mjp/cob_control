@@ -37,35 +37,47 @@ from publishers import JointStatePublisher
 from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import MultiArrayDimension
 import thread
-import CobMPC as ctr
 
-from mpc import *
+from CobMPC import CobMPC
 
 
 joint_pub = JointStatePublisher('/arm/joint_group_velocity_controller/command')
 q = Float64MultiArray()
 
 def loop():
-
+    rate = rospy.Rate(100)  # 10hz
     joint_pub.open()
     while not rospy.is_shutdown():
-        #joint_pub.publish(q)
-        print("publising")
+        joint_pub.publish(q)
         rate.sleep()
     thread.exit_thread()
 
 def loop2():
     rate = rospy.Rate(100)  # 10hz
     while not rospy.is_shutdown():
-        print('thread 2')
+        #print('thread 2')
         rate.sleep()
     thread.exit_thread()
 
 if __name__ == '__main__':
     rospy.init_node('listener', anonymous=True)
 
-    controller = ctr.CobMPC(ns='arm')
-    controller.spin()
-    rospy.spin()
+    joint_sub = JointStateSubscriber('/arm/joint_states')
+    joint_sub.open()
 
+    #odometry_sub=OdometrySubscriber('/base/odometry_controller/odometry')
+    #odometry_sub.open()
+    q.data=joint_sub.data.velocity
+    # Create two threads as follows
+    try:
+        #thread.start_new_thread(loop, ())
+        #thread.start_new_thread(loop2, ())
+        controller = CobMPC(ns="arm")
+        controller.spin()
+    except:
+        print "Error: unable to start thread"
+
+    rospy.spin()
+    while not rospy.is_shutdown():
+        pass
 
