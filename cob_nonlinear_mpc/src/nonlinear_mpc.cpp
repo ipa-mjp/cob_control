@@ -32,7 +32,10 @@
 void MPC::init()
 {
     // Total number of NLP variables
-    NV = state_dim_*(num_shooting_nodes_+1) +control_dim_*num_shooting_nodes_;
+    int nxd = num_shooting_nodes_ * (p_order_+1)*state_dim_;
+    int nu = num_shooting_nodes_ * control_dim_;
+    int nxf = state_dim_;
+    NV = nxd + nu + nxf;
 
     V = MX::sym("V",NV);
     vector<double> tmp;
@@ -72,6 +75,57 @@ void MPC::init()
 
     // Get end-effector fk
     fk_ = _fk_.getFkVector().at(_fk_.getFkVector().size()-1);
+
+
+    // Degree of interpolating polynomial
+        int d = 1;
+        p_order_ = d;
+
+        // Size of the finite elements
+        h_ = time_horizon_/(double)num_shooting_nodes_;
+
+        // Choose collocation points
+        vector<double> tau_root = collocation_points(d, "radau");
+        tau_root.insert(tau_root.begin(), 0);
+
+        // Coefficients of the quadrature function
+        vector<double> B(d+1);
+
+        // Coefficients of the collocation equation
+        vector<vector<double> > C(d+1,vector<double>(d+1));
+
+        // Coefficients of the continuity equation
+        vector<double> D(d+1);
+
+        // For all collocation points
+        for(int j=0; j<d+1; ++j)
+        {
+            // Construct Lagrange polynomials to get the polynomial basis at the collocation point
+            Polynomial p = 1;
+            for(int r=0; r<d+1; ++r)
+            {
+                if(r!=j)
+                {
+                    p *= Polynomial(-tau_root[r],1)/(tau_root[j]-tau_root[r]);
+                }
+            }
+
+            // Evaluate the polynomial at the final time to get the coefficients of the continuity equation
+            D[j] = p(1.0);
+
+            // Evaluate the time derivative of the polynomial at all collocation points to get the coefficients of the continuity equation
+            Polynomial dp = p.derivative();
+            for(int r=0; r<d+1; ++r)
+            {
+                C[j][r] = dp(tau_root[r]);
+            }
+            Polynomial p_int = p.anti_derivative();
+            B[j] = p_int(1.0);
+        }
+
+        C_ = C;
+        B_ = B;
+        D_ = D;
 
     ROS_WARN_STREAM("MPC initialized");
 }
@@ -192,8 +246,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy + 10 * dot(error_attitute,error_attitute)+barrier;
 //    SX phi = 100*dot(pos_c-pos_target,pos_c-pos_target) + 100 * dot(error_attitute,error_attitute)+ barrier;
 
-    ROS_INFO("Create Euler integrator function");
-    Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
+//    Function F = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, L);
 
 //    Function F_terminal = create_integrator(state_dim_, control_dim_, time_horizon_, num_shooting_nodes_, qdot, x_, u_, phi);
 
@@ -201,6 +254,9 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     // Offset in V
     int offset=this->init_shooting_node();
 
+
+    ROS_WARN_STREAM("offset: " << offset);
+    ROS_WARN_STREAM("NV: " << NV);
     ROS_INFO("(Make sure that the size of the variable vector is consistent with the number of variables that we have referenced");
     casadi_assert(offset==NV);
 
@@ -209,23 +265,6 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
 
     //Constraint function and bounds
     vector<MX> g;
-
-    ROS_INFO("Loop over shooting nodes");
-    for(unsigned int k=0; k<num_shooting_nodes_; ++k)
-    {
-        // Create an evaluation node
-        MXDict I_out = F( MXDict{ {"x0", X[k]}, {"p", U[k]} });
-
-        // Save continuity constraints
-        g.push_back( I_out.at("xf") - X[k+1] );
-
-        // Add objective function contribution
-        J += I_out.at("qf");
-    }
-    // Terminal cost
-//     Create an evaluation node
-//    MXDict I_term = F_terminal( MXDict{ {"x0", X[num_shooting_nodes_-1]}, {"p", U[num_shooting_nodes_-1]} });
-//    J += I_term.at("qf");
 
     ROS_INFO("NLP");
     MXDict nlp = {{"x", V}, {"f", J}, {"g", vertcat(g)}};
@@ -274,7 +313,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     {
         for(int j=0; j<control_dim_; ++j)
         {
-            q_dot[j] = V_opt.at(state_dim_ + j);
+            q_dot[j] = V_opt.at((p_order_+1)*state_dim_ + j);
             x_new.push_back(V_opt.at(j));
         }
     }
@@ -293,49 +332,69 @@ int MPC::init_shooting_node()
 {
     // Offset in V
     int offset=0;
-    X.clear();
-    U.clear();
+    X_.clear();
+    U_.clear();
     min_state.clear();
     max_state.clear();
     init_state.clear();
 
-    //THIS CAN BE SERIOULSY OPTIMISED
+    vector<vector<MX> > X(num_shooting_nodes_+1,vector<MX>(p_order_+1));
+    vector<MX> U(p_order_+1);
+
+    U_ = U;
+    X_ = X;
+
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
-        //ROS_INFO("Local state");
-        X.push_back( V.nz(Slice(offset,offset+state_dim_)));
-
-        if(k==0)
+        for(unsigned int j=0; j<p_order_+1; j++)
         {
-            min_state.insert(min_state.end(), x0_min.begin(), x0_min.end());
-            max_state.insert(max_state.end(), x0_max.begin(), x0_max.end());
-        }
-        else
-        {
-            min_state.insert(min_state.end(), x_min.begin(), x_min.end());
-            max_state.insert(max_state.end(), x_max.begin(), x_max.end());
-        }
-        init_state.insert(init_state.end(), x_init.begin(), x_init.end());
-        offset += state_dim_;
+            // Local state
+            X_[k][j] =  V.nz(Slice(offset,offset+state_dim_));
 
-        //ROS_INFO("Local control via shift initialization");
-        U.push_back( V.nz(Slice(offset,offset+control_dim_)));
-        min_state.insert(min_state.end(), u_min.begin(), u_min.end());
-        max_state.insert(max_state.end(), u_max.begin(), u_max.end());
+            vector<double> x_ol;
+            x_ol = x_open_loop_.at(k);
+            init_state.insert(init_state.end(), x_init.begin(), x_init.end());
 
-        init_state.insert(init_state.end(), u_init_.begin(), u_init_.end());
+            // Bounds
+            if(k==0 && j==0)
+            {
+                min_state.insert(min_state.end(), x0_min.begin(), x0_min.end());
+                max_state.insert(max_state.end(), x0_max.begin(), x0_max.end());
+            }
+            else    // Path constraints from now on
+            {
+                min_state.insert(min_state.end(), state_path_constraints_min_.begin(), state_path_constraints_min_.end());
+                max_state.insert(max_state.end(), state_path_constraints_max_.begin(), state_path_constraints_max_.end());
+            }
+
+            offset += state_dim_;
+        }
+
+        // Local control via shift initialization
+        U_.push_back( V.nz(Slice(offset,offset+control_dim_)));
+        min_state.insert(min_state.end(), input_constraints_min_.begin(), input_constraints_min_.end());
+        max_state.insert(max_state.end(), input_constraints_max_.begin(), input_constraints_max_.end());
+
+        vector<double> u_ol;
+        u_ol = u_open_loop_.at(0);
+
+        init_state.insert(init_state.end(), u_ol.begin(), u_ol.end());
         offset += control_dim_;
     }
 
     ROS_INFO("State at end");
-    X.push_back(V.nz(Slice(offset,offset+state_dim_)));
-    min_state.insert(min_state.end(), xf_min.begin(), xf_min.end());
-    max_state.insert(max_state.end(), xf_max.begin(), xf_max.end());
-    init_state.insert(init_state.end(), u_init_.begin(), u_init_.end());
+    vector<double> x_ol;
+    x_ol = x_open_loop_.at(num_shooting_nodes_-1);
+    // State at end
+    X_[num_shooting_nodes_][0] = V.nz(Slice(offset,offset+state_dim_));
+    min_state.insert(min_state.end(), state_terminal_constraints_min_.begin(), state_terminal_constraints_min_.end());
+    max_state.insert(max_state.end(), state_terminal_constraints_max_.begin(), state_terminal_constraints_max_.end());
+    init_state.insert(init_state.end(), x_init.begin(), x_init.end());
 
     x0_min.clear();
     x0_max.clear();
     x_init.clear();
+
     return offset += state_dim_;
 }
 

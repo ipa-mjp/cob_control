@@ -98,8 +98,21 @@ private:
 
     // State at each shooting node and control for each shooting interval
     // Declare variable vector for the NLP
+    double h_;
+
+    int p_order_;
+    int num_finite_elements_;
+    // Coefficients of the collocation equation
+    vector<vector<double> > C_;
+    // Coefficients of the continuity equation
+    vector<double> D_;
+
+    // Coefficients of the quadrature function
+    vector<double> B_;
+
     MX V ;
-    vector<MX> X, U;
+    vector<MX> U_;
+    vector<vector<MX> > X_;
     // NLP variable bounds and initial guess
     vector<double> min_state,max_state,init_state;
 
