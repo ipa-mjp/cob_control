@@ -72,14 +72,14 @@ void MPC::init()
 
 
     // Degree of interpolating polynomial
-        int d = 1;
+        int d = 3;
         p_order_ = d;
 
         // Size of the finite elements
         h_ = time_horizon_/(double)num_shooting_nodes_;
 
         // Choose collocation points
-        vector<double> tau_root = collocation_points(d, "legendre");
+        vector<double> tau_root = collocation_points(d, "radau");
         tau_root.insert(tau_root.begin(), 0);
 
         // Coefficients of the quadrature function
@@ -237,14 +237,14 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     energy.print(std::cout);
 
 
-//    SX R2 = 5*SX::vertcat({5, 5, 5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
-//    SX energy2 = dot(sqrt(R)*u_,sqrt(R)*u_);
+    SX R2 = 0.4*SX::vertcat({5, 5, 5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
+    SX energy2 = dot(sqrt(R2)*u_,sqrt(R2)*u_);
 
     SX error=pos_c-pos_target;
 
     barrier = bv_.getOutputConstraints();
     ROS_INFO("Objective");
-    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy + 10 * dot(error_attitute,error_attitute)+barrier;
+    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy2 + 10 * dot(error_attitute,error_attitute)+barrier;
 
     // Offset in V
     int offset=this->init_shooting_node();
