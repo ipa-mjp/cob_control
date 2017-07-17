@@ -38,7 +38,7 @@ from urdf_parser_py.urdf import URDF
 import PyKDL
 from kdl_parser_py.urdf import treeFromUrdfModel
 from urdf_parser_py.urdf import Robot
-from kinematics import KinematicChain
+import KDLKinematics
 
 class StateConstraints:
     path_constraints_min = 0.0
@@ -70,7 +70,10 @@ class MPC(object):
         self.rate = rospy.Rate(100)  # 10hz
         self.thread = None
         #SYBOLIC VARIABLES
-        self.x = SX.sym("x")
+        self.x = None
+
+        #SYMBOLIC FUNCTIONS
+        self.FK = None
 
         #KDL
         self.robot = None
@@ -80,12 +83,8 @@ class MPC(object):
 
     def init(self, ns, urdf_file):
 
-        if urdf_file is None:
-            self.robot = Robot.from_parameter_server(key='robot_description')
-        else:
-            fileObj = file(urdf_file, 'r')
-            self.robot = Robot.from_xml_string(fileObj.read())
-            fileObj.close()
+        self.robot = Robot.from_parameter_server()
+        self.kdl_kin= KDLKinematics(self.robot, "arm_base_link", "arm_wrist_3_link")
 
         if rospy.has_param(ns + '/joint_names'):
             self.joint_names = rospy.get_param(ns + '/joint_names')
@@ -166,7 +165,9 @@ class MPC(object):
             rospy.logwarn('Could not find parameter frame_tracker/target_frame.')
             exit(-2)
 
-        self.kdl_kin = KinematicChain(self.robot, base_link=self.chain_base_link, end_link=self.chain_tip_link)
+        # SYBOLIC VARIABLES
+        self.x = SX.sym("q",self.kdl_kin.get_number_joints,1)
+        print self.x
 
         rospy.loginfo("MPC Initialized...")
 
@@ -180,6 +181,7 @@ class MPC(object):
 
     def symbolic_fk(self):
         T = SX.sym("T", 4, 4)
+        self.FK = self.kdl_kin.symbolic_fk(self.x,"arm_base_link", "arm_wrist_3_link")
         if self.base_active:
             T[0, 0] = cos(self.x(2))
             T[0, 1] = -sin(self.x(2))
