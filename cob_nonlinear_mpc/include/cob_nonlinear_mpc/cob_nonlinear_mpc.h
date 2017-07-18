@@ -74,6 +74,11 @@ private:
     std::string chain_base_link_;
     std::string chain_tip_link_;
 
+    std::vector<double> time_vec;
+    std::vector<vector<double> > control_vec;
+    std::vector<double> ros_time;
+    Eigen::VectorXd qdot_old;
+
     Robot robot_;
 
     boost::shared_ptr<MPC> mpc_ctr_;

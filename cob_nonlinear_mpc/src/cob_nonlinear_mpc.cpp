@@ -223,6 +223,7 @@ bool CobNonlinearMPC::initialize()
     SX u = SX::sym("u", control_dim);  // control
     SX x = SX::sym("x", state_dim); // states
 
+
     // Calculate symbolic forward kinematics
     fk.setX(x);
     fk.setU(u);
@@ -250,7 +251,9 @@ bool CobNonlinearMPC::initialize()
     }
 
     frame_tracker_sub_ = nh_.subscribe("command_pose", 1, &CobNonlinearMPC::FrameTrackerCallback, this);
-    pub_ = nh_.advertise<std_msgs::Float64MultiArray>("joint_group_velocity_controller/command", 1);
+    pub_ = nh_.advertise<std_msgs::Float64MultiArray>("joint_group_velocity_controller/command", 0);
+
+    qdot_old = Eigen::VectorXd::Zero(control_dim);
 
     ROS_WARN_STREAM(nh_.getNamespace() << "/NMPC...initialized!");
     return true;
@@ -262,11 +265,93 @@ void CobNonlinearMPC::FrameTrackerCallback(const geometry_msgs::Pose::ConstPtr& 
 
     ros::Time time = ros::Time::now();
 
-    Eigen::MatrixXd qdot = mpc_ctr_->mpc_step(*msg, state);
+    Eigen::VectorXd qdot = mpc_ctr_->mpc_step(*msg, state);
 
     ros::Time time_new = ros::Time::now();
 
     ROS_INFO_STREAM("mpc time: " << (time_new - time).toSec());
+//
+//    double CUTOFF = 2;
+//    double RC = 1.0/(CUTOFF*2*3.14);
+//    double dt = (time_new - time).toSec();
+//    double alpha = dt/(RC+dt);
+
+
+    //    for(int i = 1; i < qdot.rows(); ++i)
+//    {
+//    qdot = qdot_old + (alpha*(qdot- qdot_old));
+//    }
+
+
+    time_vec.push_back((time_new - time).toSec());
+
+    std::vector<double> q_c;
+    for(int j=0; j< qdot.rows(); j++)
+    {
+        q_c.push_back((double)qdot(j));
+    }
+
+    control_vec.push_back(q_c);
+
+    ros_time.push_back(time_new.toSec());
+
+
+    std::ofstream myfile;
+    std::string name;
+
+    name = "/home/chris/Plots/timings.m";
+    const char* charPath = name.c_str();
+
+    myfile.open(charPath);
+
+    myfile << "t = [" << std::endl;
+
+    /// Get the vectors and write them to .m file
+    for(int i=0; i<time_vec.size(); i++)
+    {
+        myfile << time_vec.at(i) << std::endl;
+    }
+    myfile << "]; " << std::endl << "plot(t)";
+
+    myfile.close();
+
+ // ------------------------ QDOT PLOT -----------------------------------
+    name = "/home/chris/Plots/qdot.m";
+    charPath = name.c_str();
+
+    myfile.open(charPath);
+
+    myfile << "t = [" << std::endl;
+    /// Get the vectors and write them to .m file
+    for(int i=0; i<ros_time.size(); i++)
+    {
+        myfile << ros_time.at(i) << std::endl;
+    }
+    myfile << "]; " << std::endl;
+
+
+    myfile << "xdot = [" << std::endl;
+    /// Get the vectors and write them to .m file
+    for(int i=0; i<control_vec.size(); i++)
+    {
+        std::vector<double> tmp = control_vec.at(i);
+        myfile << "[" << std::endl;
+
+        for(int j=0; j < tmp.size(); j++)
+        {
+            myfile << tmp.at(j) << " ";
+        }
+
+        myfile << "];" << std::endl;
+    }
+
+    myfile << "]; " << std::endl << "plot(t, xdot)";
+
+
+    myfile.close();
+
+
+
 
     geometry_msgs::Twist base_vel_msg;
     std_msgs::Float64MultiArray vel_msg;
@@ -296,6 +381,8 @@ void CobNonlinearMPC::FrameTrackerCallback(const geometry_msgs::Pose::ConstPtr& 
         }
         pub_.publish(vel_msg);
     }
+
+    qdot_old = qdot;
 }
 
 

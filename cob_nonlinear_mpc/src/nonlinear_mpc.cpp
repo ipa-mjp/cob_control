@@ -82,6 +82,17 @@ void MPC::init()
         vector<double> tau_root = collocation_points(d, "radau");
         tau_root.insert(tau_root.begin(), 0);
 
+        // All Time points
+        vector<vector<double> > T_mat((double)num_shooting_nodes_,vector<double>(d+1));
+
+        for(int k=0; k<num_shooting_nodes_; k++)
+        {
+            for(int j=0; j<d+1; j++)
+            {
+                T_mat[k][j] = h_*(k + tau_root[j]);
+            }
+        }
+
         // Coefficients of the quadrature function
         vector<double> B(d+1);
 
@@ -120,6 +131,7 @@ void MPC::init()
         C_ = C;
         B_ = B;
         D_ = D;
+        T_mat_= T_mat;
 
         // Total number of NLP variables
         int nxd = num_shooting_nodes_ * (p_order_+1)*state_dim_;
@@ -188,6 +200,9 @@ void MPC::set_input_constraints(vector<double> input_constraints_min,vector<doub
 
 Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state)
 {
+    SX t_sym = SX::sym("t", 1);
+
+
     // Bounds and initial guess for the control
 #ifdef __DEBUG__
     ROS_INFO_STREAM("input_constraints_min_: " <<this->input_constraints_min_.size());
@@ -237,8 +252,11 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     energy.print(std::cout);
 
 
-    SX R2 = 0.4*SX::vertcat({5, 5, 5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
-    SX energy2 = dot(sqrt(R2)*u_,sqrt(R2)*u_);
+    SX R2 = 0.1*SX::vertcat({10000, 10000, 10000, 1,1,1,1,1,1,1});
+    SX energy2 = dot(sqrt(R2)*u_*t_sym,sqrt(R2)*u_*t_sym);
+//    SX energy2 = dot(sqrt(R2)*u_,sqrt(R2)*u_);
+
+    SX accl = 0.02*dot(u_,u_);
 
     SX error=pos_c-pos_target;
 
@@ -246,6 +264,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     ROS_INFO("Objective");
     SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy2 + 10 * dot(error_attitute,error_attitute)+barrier;
 
+    SX phi = dot(pos_c-pos_target,pos_c-pos_target) +   dot(error_attitute,error_attitute)+barrier;
     // Offset in V
     int offset=this->init_shooting_node();
 
@@ -255,7 +274,9 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     ROS_INFO("(Make sure that the size of the variable vector is consistent with the number of variables that we have referenced");
     casadi_assert(offset==NV);
 
-    Function F = Function("F", {x_, u_}, {qdot,L}, {"x0","u"}, {"qdot","cost"});
+    Function F = Function("F", {t_sym, x_, u_}, {qdot,L}, {"t","x0","u"}, {"qdot","cost"});
+
+    Function Ff = Function("Ff", {x_}, {phi});
 
     // Objective function
     MX J = 0;
@@ -263,7 +284,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     //Constraint function and bounds
     vector<MX> g;
 
-
+    MX X_f;
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
         for(unsigned int j=1; j<p_order_+1; j++)
@@ -277,12 +298,17 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
             }
 
             // Create an evaluation node
-            MXDict I_out = F( MXDict{ {"x0", X_[k][j]}, {"u", U_[k]} });
+            MXDict I_out = F( MXDict{ {"t", T_mat_[k][j]}, {"x0", X_[k][j]}, {"u", U_[k]} });
 
             // Save continuity constraints
             g.push_back( h_*I_out.at("qdot") - xp_jk );
             // Add objective function contribution
             J += B_[j] * I_out.at("cost")*h_;
+        }
+
+        if(k==num_shooting_nodes_-1)
+        {
+            X_f = X_[k][p_order_];
         }
 
         MX xf_k = 0;
@@ -291,8 +317,9 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
             xf_k += D_[r]*X_[k][r];
         }
         g.push_back( X_[k+1][0] - xf_k );
-}
-
+    }
+    MX Terminal_cost = Ff( X_f).at(0);
+    J += Terminal_cost;
 
     ROS_INFO("NLP");
     MXDict nlp = {{"x", V}, {"f", J}, {"g", vertcat(g)}};

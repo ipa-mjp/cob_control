@@ -87,6 +87,7 @@ private:
     // Symbolic variables
     SX u_; //control symbolic input
     SX x_; //robot symbolic state
+    SX t_; // symbolic time
     SX q_c; //Current orientation quaternion
     SX pos_c ;//Current cartesian position
     SX pos_target; //Target position
@@ -109,6 +110,9 @@ private:
 
     // Coefficients of the quadrature function
     vector<double> B_;
+
+    // All time points
+    vector<vector<double> >T_mat_;
 
     MX V ;
     vector<MX> U_;
