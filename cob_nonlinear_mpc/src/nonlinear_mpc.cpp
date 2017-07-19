@@ -43,6 +43,11 @@ void MPC::init()
         u_open_loop_.push_back(tmp);
     }
 
+    for(int i=0; i<control_dim_; ++i)
+    {
+        u_apply_.push_back(0);
+    }
+
     for(int k=1; k <= num_shooting_nodes_; ++k)
     {
         tmp.clear();
@@ -137,6 +142,7 @@ void MPC::init()
         int nxd = num_shooting_nodes_ * (p_order_+1)*state_dim_;
         int nu = num_shooting_nodes_ * control_dim_;
         int nxf = state_dim_;
+//        NV = control_dim_ + nxd + nu + nxf;
         NV = nxd + nu + nxf;
 
         V = MX::sym("V",NV);
@@ -201,7 +207,14 @@ void MPC::set_input_constraints(vector<double> input_constraints_min,vector<doub
 Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArray& state)
 {
     SX t_sym = SX::sym("t", 1);
+    SX u1_sym = SX::sym("U1",control_dim_);
+    SX u2_sym = SX::sym("U2",control_dim_);
 
+    // Approximate acceleration
+    SX accel = (u2_sym-u1_sym)/h_;
+    Function accl = Function("accl", {u1_sym, u2_sym}, {accel});
+
+    SX L_acc = 0.03*dot(accel, accel);
 
     // Bounds and initial guess for the control
 #ifdef __DEBUG__
@@ -252,11 +265,9 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     energy.print(std::cout);
 
 
-    SX R2 = 0.1*SX::vertcat({10000, 10000, 10000, 1,1,1,1,1,1,1});
-    SX energy2 = dot(sqrt(R2)*u_*t_sym,sqrt(R2)*u_*t_sym);
+    SX R2 = 0.1*SX::vertcat({1,1,1,1,1,1,1});
+    SX energy2 = dot(sqrt(R2)*u_,sqrt(R2)*u_);
 //    SX energy2 = dot(sqrt(R2)*u_,sqrt(R2)*u_);
-
-    SX accl = 0.02*dot(u_,u_);
 
     SX error=pos_c-pos_target;
 
@@ -264,7 +275,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     ROS_INFO("Objective");
     SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + energy2 + 10 * dot(error_attitute,error_attitute)+barrier;
 
-    SX phi = dot(pos_c-pos_target,pos_c-pos_target) +   dot(error_attitute,error_attitute)+barrier;
+    SX phi = 0*dot(pos_c-pos_target,pos_c-pos_target) +   0*dot(error_attitute,error_attitute)+barrier;
     // Offset in V
     int offset=this->init_shooting_node();
 
@@ -274,6 +285,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     ROS_INFO("(Make sure that the size of the variable vector is consistent with the number of variables that we have referenced");
     casadi_assert(offset==NV);
 
+//    Function F = Function("F", {t_sym, x_, u_, u1_sym ,u2_sym}, {qdot,L, accel}, {"t","x0","u", "u1", "u2"}, {"qdot","cost", "accel"});
     Function F = Function("F", {t_sym, x_, u_}, {qdot,L}, {"t","x0","u"}, {"qdot","cost"});
 
     Function Ff = Function("Ff", {x_}, {phi});
@@ -285,6 +297,9 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     vector<MX> g;
 
     MX X_f;
+
+//    MX U0 = u_apply_;
+
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
         for(unsigned int j=1; j<p_order_+1; j++)
@@ -298,7 +313,9 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
             }
 
             // Create an evaluation node
-            MXDict I_out = F( MXDict{ {"t", T_mat_[k][j]}, {"x0", X_[k][j]}, {"u", U_[k]} });
+//            MXDict I_out = F( MXDict{ {"t", T_mat_[k][j]}, {"x0", X_[k][j]}, {"u", U_[k+1]} , {"u1", U_[k]}, {"u2", U_[k+1]} });
+            MXDict I_out = F( MXDict{ {"t", T_mat_[k][j]}, {"x0", X_[k][j]}, {"u", U_[k+1]} });
+
 
             // Save continuity constraints
             g.push_back( h_*I_out.at("qdot") - xp_jk );
@@ -317,6 +334,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
             xf_k += D_[r]*X_[k][r];
         }
         g.push_back( X_[k+1][0] - xf_k );
+
     }
     MX Terminal_cost = Ff( X_f).at(0);
     J += Terminal_cost;
@@ -357,19 +375,25 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     vector<double> V_opt(res.at("x"));
     vector<double> J_opt(res.at("f"));
 
+    ROS_INFO_STREAM("V_opt: " << V_opt);
+
     Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(state_dim_);
 
     SX sx_x_new;
     u_open_loop_.clear();
     x_open_loop_.clear();
     x_new.clear();
+    u_apply_.clear();
 
     for(int i=0; i<1; ++i)  // Copy only the first optimal control sequence
     {
         for(int j=0; j<control_dim_; ++j)
         {
+//            q_dot[j] = V_opt.at(control_dim_+(p_order_+1)*state_dim_ + j);
             q_dot[j] = V_opt.at((p_order_+1)*state_dim_ + j);
+
             x_new.push_back(V_opt.at(j));
+            u_apply_.push_back(q_dot[j]);
         }
     }
     sx_x_new = SX::vertcat({x_new});
@@ -395,10 +419,15 @@ int MPC::init_shooting_node()
     init_state.clear();
 
     vector<vector<MX> > X(num_shooting_nodes_+1,vector<MX>(p_order_+1));
-    vector<MX> U(p_order_+1);
+    vector<MX> U(num_shooting_nodes_);
 
 
-
+    // U0 - for acceleration
+//    U.push_back( V.nz(Slice(offset,offset+control_dim_)));
+//    min_state.insert(min_state.end(), u_apply_.begin(), u_apply_.end());
+//    max_state.insert(max_state.end(), u_apply_.begin(), u_apply_.end());
+//    init_state.insert(init_state.end(), u_apply_.begin(), u_apply_.end());
+//    offset += control_dim_;
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
         for(unsigned int j=0; j<p_order_+1; j++)
@@ -411,8 +440,8 @@ int MPC::init_shooting_node()
             // Bounds
             if(k==0 && j==0)
             {
-                min_state.insert(min_state.end(), x0_min.begin(), x0_min.end());
-                max_state.insert(max_state.end(), x0_max.begin(), x0_max.end());
+                min_state.insert(min_state.end(), x_init.begin(), x_init.end());
+                max_state.insert(max_state.end(), x_init.begin(), x_init.end());
             }
             else    // Path constraints from now on
             {
@@ -427,8 +456,8 @@ int MPC::init_shooting_node()
         U.push_back( V.nz(Slice(offset,offset+control_dim_)));
         min_state.insert(min_state.end(), u_min.begin(), u_min.end());
         max_state.insert(max_state.end(), u_max.begin(), u_max.end());
-
         init_state.insert(init_state.end(), u_init_.begin(), u_init_.end());
+
         offset += control_dim_;
     }
 

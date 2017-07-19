@@ -17,7 +17,7 @@ class InteractiveObstacle:
     def __init__(self):
 
         #Specify a frame_id - transformation to root_frame of obstacle_distance node is handled in according subscriber callback
-        self.root_frame = rospy.get_param("root_frame")
+        self.root_frame = 'world'
         self.obstacle_frame = rospy.get_namespace() + "interactive_box_frame"
 
         self.pub = rospy.Publisher("obstacle_distance/registerObstacle", CollisionObject, queue_size=1, latch=True)
