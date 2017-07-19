@@ -142,8 +142,7 @@ void MPC::init()
         int nxd = num_shooting_nodes_ * (p_order_+1)*state_dim_;
         int nu = num_shooting_nodes_ * control_dim_;
         int nxf = state_dim_;
-//        NV = control_dim_ + nxd + nu + nxf;
-        NV = nxd + nu + nxf;
+        NV = control_dim_ + nxd + nu + nxf;
 
         V = MX::sym("V",NV);
 
@@ -285,8 +284,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     ROS_INFO("(Make sure that the size of the variable vector is consistent with the number of variables that we have referenced");
     casadi_assert(offset==NV);
 
-//    Function F = Function("F", {t_sym, x_, u_, u1_sym ,u2_sym}, {qdot,L, accel}, {"t","x0","u", "u1", "u2"}, {"qdot","cost", "accel"});
-    Function F = Function("F", {t_sym, x_, u_}, {qdot,L}, {"t","x0","u"}, {"qdot","cost"});
+    Function F = Function("F", {t_sym, x_, u_, u1_sym ,u2_sym}, {qdot,L, accel}, {"t","x0","u", "u1", "u2"}, {"qdot","cost", "accel"});
 
     Function Ff = Function("Ff", {x_}, {phi});
 
@@ -313,8 +311,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
             }
 
             // Create an evaluation node
-//            MXDict I_out = F( MXDict{ {"t", T_mat_[k][j]}, {"x0", X_[k][j]}, {"u", U_[k+1]} , {"u1", U_[k]}, {"u2", U_[k+1]} });
-            MXDict I_out = F( MXDict{ {"t", T_mat_[k][j]}, {"x0", X_[k][j]}, {"u", U_[k+1]} });
+            MXDict I_out = F( MXDict{ {"t", T_mat_[k][j]}, {"x0", X_[k][j]}, {"u", U_[k+1]} , {"u1", U_[k]}, {"u2", U_[k+1]} });
 
 
             // Save continuity constraints
@@ -389,8 +386,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     {
         for(int j=0; j<control_dim_; ++j)
         {
-//            q_dot[j] = V_opt.at(control_dim_+(p_order_+1)*state_dim_ + j);
-            q_dot[j] = V_opt.at((p_order_+1)*state_dim_ + j);
+            q_dot[j] = V_opt.at(control_dim_+(p_order_+1)*state_dim_ + j);
 
             x_new.push_back(V_opt.at(j));
             u_apply_.push_back(q_dot[j]);
@@ -423,11 +419,11 @@ int MPC::init_shooting_node()
 
 
     // U0 - for acceleration
-//    U.push_back( V.nz(Slice(offset,offset+control_dim_)));
-//    min_state.insert(min_state.end(), u_apply_.begin(), u_apply_.end());
-//    max_state.insert(max_state.end(), u_apply_.begin(), u_apply_.end());
-//    init_state.insert(init_state.end(), u_apply_.begin(), u_apply_.end());
-//    offset += control_dim_;
+    U.push_back( V.nz(Slice(offset,offset+control_dim_)));
+    min_state.insert(min_state.end(), u_apply_.begin(), u_apply_.end());
+    max_state.insert(max_state.end(), u_apply_.begin(), u_apply_.end());
+    init_state.insert(init_state.end(), u_apply_.begin(), u_apply_.end());
+    offset += control_dim_;
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
         for(unsigned int j=0; j<p_order_+1; j++)
