@@ -195,12 +195,12 @@ SX BoundingVolume::getOutputConstraints()
 
                         if(counter == 0)
                         {
-                            barrier = exp((0.3 - sqrt(dist))/0.01);
+                            barrier = exp((0.3 - sqrt(dist))/0.1);
                             counter = 1;
                         }
                         else
                         {
-                            barrier += exp((0.3 - sqrt(dist))/0.01);
+                            barrier += exp((0.3 - sqrt(dist))/0.1);
                         }
                     }
                     else
@@ -209,12 +209,12 @@ SX BoundingVolume::getOutputConstraints()
 
                         if(counter == 0)
                         {
-                            barrier = exp((bv_radius - sqrt(dist))/0.01);
+                            barrier = exp((bv_radius - sqrt(dist))/0.1);
                             counter = 1;
                         }
                         else
                         {
-                            barrier += exp((bv_radius - sqrt(dist))/0.01);
+                            barrier += exp((bv_radius - sqrt(dist))/0.1);
                         }
                     }
                 }

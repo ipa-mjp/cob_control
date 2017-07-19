@@ -18,7 +18,7 @@ if __name__ == '__main__':
     goal = CartesianControllerGoal()
 
     goal.move_type = CartesianControllerGoal.LIN
-    goal.move_lin.pose_goal.position.x = -0.4
+    goal.move_lin.pose_goal.position.x = 0.4
     goal.move_lin.pose_goal.position.y = 0.3
     goal.move_lin.pose_goal.position.z = 0.8
     goal.move_lin.pose_goal.orientation.x = 0.0
@@ -27,8 +27,8 @@ if __name__ == '__main__':
     goal.move_lin.pose_goal.orientation.w = 1.0
     goal.move_lin.frame_id = 'world'
 
-    goal.profile.vel = 0.12
-    goal.profile.accl = 0.1
+    goal.profile.vel = 0.04
+    goal.profile.accl = 0.5
     goal.profile.profile_type = Profile.SINOID
 
     #print goal

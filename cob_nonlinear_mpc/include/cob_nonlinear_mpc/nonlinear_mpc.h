@@ -75,6 +75,7 @@ private:
     vector<vector<double>> u_open_loop_;
     vector<vector<double>> x_open_loop_;
     vector<double> u_apply_;
+    vector<double> a0_;
 
     vector<double> u_min;
     vector<double> u_max;

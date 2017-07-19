@@ -209,11 +209,17 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     SX u1_sym = SX::sym("U1",control_dim_);
     SX u2_sym = SX::sym("U2",control_dim_);
 
+    SX a1_sym = SX::sym("A1",control_dim_);
+
     // Approximate acceleration
     SX accel = (u2_sym-u1_sym)/h_;
     Function accl = Function("accl", {u1_sym, u2_sym}, {accel});
 
-    SX L_acc = 0.03*dot(accel, accel);
+    SX L_acc = 0.0005*dot(accel, accel);
+
+    SX jerk = (a1_sym-accel)/h_;
+    SX L_jerk = 0.0005*dot(jerk, jerk);
+
 
     // Bounds and initial guess for the control
 #ifdef __DEBUG__
@@ -263,29 +269,27 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     SX energy = SX::dot(R,u_);
     energy.print(std::cout);
 
-
-    SX R2 = 0.1*SX::vertcat({1,1,1,1,1,1,1});
+    SX R2 = 0.0001*SX::vertcat({1,1,1,1,1,1,1});
     SX energy2 = dot(sqrt(R2)*u_,sqrt(R2)*u_);
 //    SX energy2 = dot(sqrt(R2)*u_,sqrt(R2)*u_);
 
     SX error=pos_c-pos_target;
 
     barrier = bv_.getOutputConstraints();
-    ROS_INFO("Objective");
-    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + 10 * dot(error_attitute,error_attitute)+barrier;
+//    ROS_INFO("Objective");
+    SX L = 10*dot(pos_c-pos_target,pos_c-pos_target) + 10 * dot(error_attitute,error_attitute) + L_jerk + 10*t_sym*t_sym;
 
     SX phi = 0*dot(pos_c-pos_target,pos_c-pos_target) +   0*dot(error_attitute,error_attitute)+barrier;
     // Offset in V
     int offset=this->init_shooting_node();
 
 
-    ROS_WARN_STREAM("offset: " << offset);
-    ROS_WARN_STREAM("NV: " << NV);
-    ROS_INFO("(Make sure that the size of the variable vector is consistent with the number of variables that we have referenced");
+//    ROS_WARN_STREAM("offset: " << offset);
+//    ROS_WARN_STREAM("NV: " << NV);
+//    ROS_INFO("(Make sure that the size of the variable vector is consistent with the number of variables that we have referenced");
     casadi_assert(offset==NV);
 
-//    Function F = Function("F", {t_sym, x_, u_, u1_sym ,u2_sym}, {qdot,L, accel}, {"t","x0","u", "u1", "u2"}, {"qdot","cost", "accel"});
-    Function F = Function("F", {t_sym, x_, u_}, {qdot,L}, {"t","x0","u"}, {"qdot","cost"});
+    Function F = Function("F", {t_sym, x_, u_, u1_sym ,u2_sym, a1_sym}, {qdot,L, accel}, {"t","x0","u", "u1", "u2", "a1"}, {"qdot","cost", "accel"});
 
     Function Ff = Function("Ff", {x_}, {phi});
 
@@ -298,6 +302,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     MX X_f;
 
     MX U0 = MX::vertcat({u_apply_});
+    MX A0 = MX::vertcat({a0_});
 
     for(unsigned int k=0; k<num_shooting_nodes_; ++k)
     {
@@ -312,9 +317,9 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
             }
 
             // Create an evaluation node
-//            MXDict I_out = F( MXDict{ {"t", T_mat_[k][j]}, {"x0", X_[k][j]}, {"u", U_[k]} , {"u1", U0}, {"u2", U_[k]} });
+            MXDict I_out = F( MXDict{ {"t", T_mat_[k][j]}, {"x0", X_[k][j]}, {"u", U_[k]} , {"u1", U0}, {"u2", U_[k]} , {"a1", A0} });
 
-            MXDict I_out = F( MXDict{ {"t", T_mat_[k][j]}, {"x0", X_[k][j]}, {"u", U_[k]} });
+            A0 = I_out.at("accel");
 
             // Save continuity constraints
             g.push_back( h_*I_out.at("qdot") - xp_jk );
@@ -334,23 +339,23 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
         }
         g.push_back( X_[k+1][0] - xf_k );
 
-//        U0 = U_[k];
+        U0 = U_[k];
     }
 //    MX Terminal_cost = Ff( X_f).at(0);
 //    J += Terminal_cost;
 
-    ROS_INFO("NLP");
+//    ROS_INFO("NLP");
     MXDict nlp = {{"x", V}, {"f", J}, {"g", vertcat(g)}};
 
     // Set options
     Dict opts;
 
-    opts["ipopt.tol"] = 1e-5;
+    opts["ipopt.tol"] = 1e-2;
     opts["ipopt.max_iter"] = 10;
 //    opts["ipopt.hessian_approximation"] = "limited-memory";
 //    opts["ipopt.hessian_constant"] = "yes";
     opts["ipopt.linear_solver"] = "ma27";
-    opts["ipopt.print_level"] = 0;
+    opts["ipopt.print_level"] = 1;
     opts["print_time"] = false;
     opts["expand"] = false;  // Removes overhead
 
@@ -375,10 +380,10 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     vector<double> V_opt(res.at("x"));
     vector<double> J_opt(res.at("f"));
 
-    ROS_INFO_STREAM("V_opt: " << V_opt);
+//    ROS_INFO_STREAM("V_opt: " << V_opt);
 
     Eigen::VectorXd q_dot = Eigen::VectorXd::Zero(state_dim_);
-
+    Eigen::VectorXd q_dot2 = Eigen::VectorXd::Zero(state_dim_);
     SX sx_x_new;
     u_open_loop_.clear();
     x_open_loop_.clear();
@@ -389,12 +394,30 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
     {
         for(int j=0; j<control_dim_; ++j)
         {
-//            q_dot[j] = V_opt.at(control_dim_+(p_order_+1)*state_dim_ + j);
             q_dot[j] = V_opt.at((p_order_+1)*state_dim_ + j);
 
             x_new.push_back(V_opt.at(j));
             u_apply_.push_back(q_dot[j]);
         }
+    }
+
+
+
+    a0_.clear();
+    vector<double> temp;
+
+    for(int i=0; i<control_dim_; ++i)
+    {
+        q_dot2[i] = V_opt.at((p_order_+1)*state_dim_*2 + i);
+    }
+
+    Eigen::VectorXd acc = Eigen::VectorXd::Zero(state_dim_);
+
+    acc = (q_dot2 - q_dot)/h_;
+
+    for(int i=0; i<control_dim_; ++i)
+    {
+        a0_.push_back(acc[i]);
     }
     sx_x_new = SX::vertcat({x_new});
 
@@ -409,7 +432,7 @@ Eigen::MatrixXd MPC::mpc_step(const geometry_msgs::Pose pose, const KDL::JntArra
 }
 int MPC::init_shooting_node()
 {
-    ROS_INFO_STREAM("Init Nodes");
+//    ROS_INFO_STREAM("Init Nodes");
     // Offset in V
     int offset=0;
     X_.clear();
@@ -419,7 +442,7 @@ int MPC::init_shooting_node()
     init_state.clear();
 
     vector<vector<MX> > X(num_shooting_nodes_+1,vector<MX>(p_order_+1));
-    vector<MX> U(num_shooting_nodes_);
+    vector<MX> U(p_order_+1);
 
 
     // U0 - for acceleration
