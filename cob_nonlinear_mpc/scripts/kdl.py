@@ -213,7 +213,6 @@ class Kinematics(object):
         for i in range(0, len(list)):
             if list[i][1] == 'revolute':
                 rot = self.create_rotation_matrix_sym(q[i],list[i][3])
-                print list[i][2]
                 fk = mtimes(fk,list[i][2])
                 fk = mtimes(fk,rot)
             elif list[i][1] == 'prismatic':

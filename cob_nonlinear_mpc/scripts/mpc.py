@@ -172,13 +172,13 @@ class MPC(object):
         #print 'SYBOLIC VARIABLES'
         self.x = SX.sym('q',self.state_dim,1)
         self.pos = SX.sym('pos',4,4)
-        self.FK = self.kdl_kin.symbolic_fk(self.x)
-        print  self.FK
+        self.fk = self.kdl_kin.symbolic_fk(self.x)
+        self.FK = Function('f', [self.x],[self.fk])
         rospy.loginfo("MPC Initialized...")
 
     def mpcStep(self):
         print("MPC_step")
-        print self.FK(SX(self.join_state_))
+        print self.FK(self.join_state_)
 
     def spin(self):
         self.thread=thread.start_new_thread(name="mpc", target=self.mpcStep())
