@@ -1,4 +1,30 @@
 #!/usr/bin/env python
+"""
+ * \file
+ *
+ * \note
+ *   Copyright (c) 2017 \n
+ *   Fraunhofer Institute for Manufacturing Engineering
+ *   and Automation (IPA) \n\n
+ *
+ *****************************************************************
+ *
+ * \note
+ *   Project name: care-o-bot
+ * \note
+ *   ROS stack name: cob_control
+ * \note
+ *   ROS package name: cob_nmpc_controller
+ *
+ * \author
+ *   Author: Bruno Brito, email: Bruno.Brito@ipa.fraunhofer.de
+ *
+ * \date Date of creation: July, 2017
+ *
+ * \brief
+ *
+ *
+"""
 
 import numpy as np
 
@@ -13,20 +39,6 @@ import tf
 from casadi import *
 
 pi = 3.1415
-
-def create_kdl_kin(base_link, end_link, urdf_filename=None, description_param="/robot_description"):
-    if urdf_filename is None:
-        robot = Robot.from_parameter_server(key=description_param)
-    else:
-        f = file(urdf_filename, 'r')
-        robot = Robot.from_xml_string(f.read())
-        f.close()
-    return Kinematics(robot, base_link, end_link)
-
-
-##
-# Provides wrappers for performing KDL functions on a designated kinematic
-# chain given a URDF representation of a robot.
 
 class Kinematics(object):
     ##
@@ -61,10 +73,10 @@ class Kinematics(object):
         self.joint_safety_lower = []
         self.joint_safety_upper = []
         self.joint_types = []
-        self.joint_states = [0., 0., 0., 0., 0., 0.]
+        self.joint_states = []
         self.tf_list = []
-        rospy.Subscriber("/arm/joint_states", JointState, self.jointStateCallback)
-
+        print base_link
+        print end_link
         for jnt_name in self.get_joint_names():
             jnt = urdf.joint_map[jnt_name]
 
@@ -99,7 +111,7 @@ class Kinematics(object):
                                             for jl in self.joint_safety_upper])
         self.joint_types = self.joint_types
         self.num_joints = len(self.get_joint_names())
-
+        print '1'
         self._fk_kdl = kdl.ChainFkSolverPos_recursive(self.chain)
         self._ik_v_kdl = kdl.ChainIkSolverVel_pinv(self.chain)
         self._ik_p_kdl = kdl.ChainIkSolverPos_NR(self.chain, self._fk_kdl, self._ik_v_kdl)
@@ -194,14 +206,20 @@ class Kinematics(object):
         return base_trans * end_trans
 
     def symbolic_fk(self, q, end_link=None, base_link=None):
+        list = self.write_to_list()
 
-        fk = MX.eye()
-        #print fk
+        fk = SX.eye(len(list))
+        print 'symbolic FK'
+        print len(list)
         for i in range(0, len(list)):
             if list[i][1] == 'revolute':
+                print '1'
                 rot = self.create_rotation_matrix(q[i],list[i][3])
-                fk = np.dot(fk, list[i][2])
-                fk = np.dot(fk, rot)
+                print rot
+                fk = fk**list[i][2]
+                print '4'
+                fk = fk*rot
+                print '5'
             elif list[i][1] == 'prismatic':
                 rospy.loginfo("prismatic")
         return fk
@@ -223,7 +241,6 @@ class Kinematics(object):
         #print fk
         for i in range(0, len(list)):
             if list[i][1] == 'revolute':
-                #rospy.loginfo("revolute")
                 rot = self.create_rotation_matrix(q[i],list[i][3])
                 fk = np.dot(fk, list[i][2])
                 fk = np.dot(fk, rot)
@@ -246,8 +263,6 @@ class Kinematics(object):
     def create_rotation_matrix(self, angle,axis):
         rot_mat = np.eye(4, 4)
         #angle = angle * pi / 180  # convert deg to rad
-        cos = np.cos(angle)
-        sin = np.sin(angle)
 
         if axis == [1,0,0]:
             rot_mat = tf.transformations.compose_matrix(angles=[angle,0,0], translate=[0,0,0])
@@ -287,7 +302,7 @@ class Kinematics(object):
 
     def _do_kdl_fk(self, q, link_number):
         endeffec_frame = kdl.Frame()
-        kinematics_status = self._fk_kdl.JntToCart(joint_list_to_kdl(q),
+        kinematics_status = self._fk_kdl.JntToCart(self.joint_list_to_kdl(q),
                                                    endeffec_frame,
                                                    link_number)
         print kinematics_status
@@ -310,7 +325,7 @@ class Kinematics(object):
     #            If None, we assume the end_link
     def jacobian(self, q, pos=None):
         j_kdl = kdl.Jacobian(self.num_joints)
-        q_kdl = joint_list_to_kdl(q)
+        q_kdl = self.joint_list_to_kdl(q)
         self._jac_kdl.JntToJac(q_kdl, j_kdl)
         if pos is not None:
             print 'Pos is not NOne'
@@ -318,7 +333,7 @@ class Kinematics(object):
             pos_kdl = kdl.Vector(pos[0]-ee_pos[0], pos[1]-ee_pos[1],
                                   pos[2]-ee_pos[2])
             j_kdl.changeRefPoint(pos_kdl)
-        return kdl_to_mat(j_kdl)
+        return self.kdl_to_mat(j_kdl)
 
     ##
     # Returns the joint space mass matrix at the end_link for the given joint angles.
@@ -326,8 +341,8 @@ class Kinematics(object):
     # @return NxN np.mat Inertia matrix
     def inertia(self, q):
         h_kdl = kdl.JntSpaceInertiaMatrix(self.num_joints)
-        self._dyn_kdl.JntToMass(joint_list_to_kdl(q), h_kdl)
-        return kdl_to_mat(h_kdl)
+        self._dyn_kdl.JntToMass(self.joint_list_to_kdl(q), h_kdl)
+        return self.kdl_to_mat(h_kdl)
 
     ##
     # Returns the cartesian space mass matrix at the end_link for the given joint angles.
@@ -460,37 +475,37 @@ class Kinematics(object):
         print 'Jacobian'
         print J
 
-def kdl_to_mat(m):
-    mat =  np.mat(np.zeros((m.rows(), m.columns())))
-    for i in range(m.rows()):
-        for j in range(m.columns()):
-            mat[i,j] = m[i,j]
-    return mat
+    def kdl_to_mat(self,m):
+        mat =  np.mat(np.zeros((m.rows(), m.columns())))
+        for i in range(m.rows()):
+            for j in range(m.columns()):
+                mat[i,j] = m[i,j]
+        return mat
 
-def joint_kdl_to_list(q):
-    if q == None:
-        return None
-    return [q[i] for i in range(q.rows())]
+    def joint_kdl_to_list(self,q):
+        if q == None:
+            return None
+        return [q[i] for i in range(q.rows())]
 
-def joint_list_to_kdl(q):
-    if q is None:
-        return None
-    if type(q) == np.matrix and q.shape[1] == 0:
-        q = q.T.tolist()[0]
-    q_kdl = kdl.JntArray(len(q))
-    for i, q_i in enumerate(q):
-        q_kdl[i] = q_i
-    return q_kdl
+    def joint_list_to_kdl(self,q):
+        if q is None:
+            return None
+        if type(q) == np.matrix and q.shape[1] == 0:
+            q = q.T.tolist()[0]
+        q_kdl = kdl.JntArray(len(q))
+        for i, q_i in enumerate(q):
+            q_kdl[i] = q_i
+        return q_kdl
 
 if __name__ == "__main__":
 
     rospy.init_node("kdl_kinematics")
     if not rospy.is_shutdown():
-        create_kdl_kin("arm_base_link", "arm_wrist_3_link")
+        #create_kdl_kin("arm_left_base_link", "arm_left_7_link")
         robot = Robot.from_parameter_server()
-        kdl_kin = KDLKinematics(robot, "arm_base_link", "arm_wrist_3_link")
+        kdl_kin = Kinematics(robot, "arm_left_base_link", "arm_left_7_link")
         #q = kdl_kin.random_joint_angles()
-        q = [0.0, 0, 0, 0.00, 0.00,0.0]
+        q = [0.0,0.0, 0, 0, 0.00, 0.00,0.0]
 
 
         #print kdl_kin.forward(q, "arm_wrist_3_link", "arm_base_link")   # arm_wrist_3_joint
@@ -503,7 +518,7 @@ if __name__ == "__main__":
 
         pose = kdl_kin.forward2(q)
         print pose
-        pose = kdl_kin.forward(q,"arm_base_link", "arm_wrist_3_link")
+        pose = kdl_kin.forward(q,"arm_left_base_link", "arm_left_7_link")
         print pose
         print kdl_kin.compute_jacobian(q)
         print kdl_kin.jacobian(q)

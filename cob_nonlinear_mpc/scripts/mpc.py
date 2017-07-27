@@ -54,7 +54,7 @@ class StateConstraints:
 
 class MPC(object):
 
-    def __init__(self, ns,urdf_file):
+    def __init__(self, ns):
         self.joint_names = []
         self.shooting_nodes = 0
         self.time_horizon = 0.0
@@ -66,7 +66,6 @@ class MPC(object):
         self.chain_base_link = ""
         self.tracking_frame = ""
         self.join_state_ = np.zeros((self.state_dim,1))
-
         self.rate = rospy.Rate(100)  # 10hz
         self.thread = None
         #SYBOLIC VARIABLES
@@ -79,12 +78,11 @@ class MPC(object):
         self.robot = None
         self.kdl_kin = None
 
-        self.init(ns, urdf_file)
+        self.init(ns)
 
-    def init(self, ns, urdf_file):
+    def init(self, ns):
 
-        self.robot = Robot.from_parameter_server()
-        self.kdl_kin= Kinematics(self.robot, "arm_base_link", "arm_wrist_3_link")
+        print 'Initializing MPC...'
 
         if rospy.has_param(ns + '/joint_names'):
             self.joint_names = rospy.get_param(ns + '/joint_names')
@@ -104,6 +102,7 @@ class MPC(object):
 
         if rospy.has_param(ns + '/nmpc/state_dim'):
             self.state_dim = rospy.get_param(ns + '/nmpc/state_dim')
+            self.join_state_ = np.zeros((self.state_dim, 1))
         else:
             rospy.logerr('Parameter state_dim not set')
 
@@ -165,16 +164,21 @@ class MPC(object):
             rospy.logwarn('Could not find parameter frame_tracker/target_frame.')
             exit(-2)
 
-        # SYBOLIC VARIABLES
-        self.x = SX.sym("q",self.kdl_kin.get_number_joints,1)
+        self.robot = Robot.from_parameter_server()
+        print 'Initializing Kinematic Chain...'
+        self.kdl_kin= Kinematics(self.robot, self.chain_base_link, self.chain_tip_link)
+        print 'Done initializing Kinematic Chain...'
+        print self.join_state_
+        print 'SYBOLIC VARIABLES'
+        self.x = SX.sym('q',self.state_dim,1)
+        print 'FK'
         self.FK = self.kdl_kin.symbolic_fk(self.x)
-        print self.x
-        print self.FK
 
         rospy.loginfo("MPC Initialized...")
 
     def mpcStep(self):
         print("MPC_step")
+        print self.join_state_
         print self.kdl_kin.forward2(self.join_state_)
 
     def spin(self):

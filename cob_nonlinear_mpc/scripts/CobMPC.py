@@ -40,8 +40,8 @@ class CobMPC(object):
 
     def __init__(self, ns):
         self.odometry_sub = OdometrySubscriber('/base/odometry_controller/odometry')
-        self.joint_sub = JointStateSubscriber('/arm/joint_states')
-        self.controller = MPC(ns=ns,urdf_file=None)
+        self.joint_sub = JointStateSubscriber('/' + ns + '/joint_states')
+        self.controller = MPC(ns=ns)
         self.thread = None
         self.rate= rospy.Rate(100)  # 10hz
 
@@ -53,19 +53,24 @@ class CobMPC(object):
         self.joint_sub.open()
         if self.controller.base_active:
             self.odometry_sub.open()
+        while not len(self.joint_sub.joint_positions_):
+            print len(self.joint_sub.joint_positions_)
+            self.rate.sleep()
+            pass
+
         while not rospy.is_shutdown():
             self.getJointState()
             self.controller.mpcStep()
-            rospy.loginfo('cob_mpc loop')
             self.rate.sleep()
             pass
-        self.thread.thread.exit_thread()
+        #self.thread.thread.exit_thread()
         return
 
     def getJointState(self):
         if self.controller.base_active:
             self.controller.join_state_=np.array([self.odometry_sub.joint_pos_,self.joint_sub.joint_positions_])
-            rospy.loginfo(self.joint_sub.joint_positions_)
+            #rospy.loginfo(self.joint_sub.joint_positions_)
         else:
             self.controller.join_state_ = self.joint_sub.joint_positions_
+            #rospy.loginfo(self.joint_sub.joint_positions_)
         return
