@@ -208,20 +208,20 @@ class Kinematics(object):
     def symbolic_fk(self, q, end_link=None, base_link=None):
         list = self.write_to_list()
 
-        fk = SX.eye(len(list))
-        print 'symbolic FK'
-        print len(list)
+        fk = SX.eye(4)
+        #print 'symbolic FK'
+        print fk
         for i in range(0, len(list)):
             if list[i][1] == 'revolute':
                 print '1'
-                rot = self.create_rotation_matrix(q[i],list[i][3])
-                print rot
-                fk = fk**list[i][2]
+                rot = self.create_rotation_matrix_sym(q[i],list[i][3])
+                fk = fk*list[i][2]
                 print '4'
                 fk = fk*rot
                 print '5'
             elif list[i][1] == 'prismatic':
                 rospy.loginfo("prismatic")
+        print fk
         return fk
 
     def forward2(self, q, end_link=None, base_link=None):
@@ -271,6 +271,26 @@ class Kinematics(object):
         elif axis == [0, 0, 1]:
             rot_mat = tf.transformations.compose_matrix(angles=[0, 0,angle], translate=[0, 0, 0])
 
+        return rot_mat
+
+    def create_rotation_matrix_sym(self, angle,axis):
+        rot_mat = SX.eye(4)
+        #angle = angle * pi / 180  # convert deg to rad
+        if axis == [1,0,0]:
+            rot_mat[1, 1] = cos(angle)
+            rot_mat[1, 2] = -sin(angle)
+            rot_mat[2, 1] = sin(angle)
+            rot_mat[2, 2] = cos(angle)
+        elif axis == [0,1,0]:
+            rot_mat[0, 0] = cos(angle)
+            rot_mat[0, 2] = -sin(angle)
+            rot_mat[2, 0] = sin(angle)
+            rot_mat[2, 2] = cos(angle)
+        elif axis == [0, 0, 1]:
+            rot_mat[0, 0] = cos(angle)
+            rot_mat[0, 1] = -sin(angle)
+            rot_mat[1, 0] = sin(angle)
+            rot_mat[1, 1] = cos(angle)
         return rot_mat
 
     ##
