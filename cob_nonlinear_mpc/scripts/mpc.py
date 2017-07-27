@@ -38,7 +38,7 @@ from urdf_parser_py.urdf import URDF
 import PyKDL
 from kdl_parser_py.urdf import treeFromUrdfModel
 from urdf_parser_py.urdf import Robot
-import KDLKinematics
+from kdl import Kinematics
 
 class StateConstraints:
     path_constraints_min = 0.0
@@ -84,7 +84,7 @@ class MPC(object):
     def init(self, ns, urdf_file):
 
         self.robot = Robot.from_parameter_server()
-        self.kdl_kin= KDLKinematics(self.robot, "arm_base_link", "arm_wrist_3_link")
+        self.kdl_kin= Kinematics(self.robot, "arm_base_link", "arm_wrist_3_link")
 
         if rospy.has_param(ns + '/joint_names'):
             self.joint_names = rospy.get_param(ns + '/joint_names')
@@ -167,13 +167,15 @@ class MPC(object):
 
         # SYBOLIC VARIABLES
         self.x = SX.sym("q",self.kdl_kin.get_number_joints,1)
+        self.FK = self.kdl_kin.symbolic_fk(self.x)
         print self.x
+        print self.FK
 
         rospy.loginfo("MPC Initialized...")
 
     def mpcStep(self):
         print("MPC_step")
-        self.kdl_kin.write_to_list()
+        print self.kdl_kin.forward2(self.join_state_)
 
     def spin(self):
         self.thread=thread.start_new_thread(name="mpc", target=self.mpcStep())

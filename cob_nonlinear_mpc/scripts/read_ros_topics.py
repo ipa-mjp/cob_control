@@ -62,12 +62,9 @@ def loop2():
 if __name__ == '__main__':
     rospy.init_node('listener', anonymous=True)
 
-    joint_sub = JointStateSubscriber('/arm/joint_states')
-    joint_sub.open()
-
     #odometry_sub=OdometrySubscriber('/base/odometry_controller/odometry')
     #odometry_sub.open()
-    q.data=joint_sub.data.velocity
+    #q.data=joint_sub.data.velocity
     # Create two threads as follows
     try:
         #thread.start_new_thread(loop, ())
