@@ -170,41 +170,22 @@ class MPC(object):
         print 'Done initializing Kinematic Chain...'
 
         #print 'SYBOLIC VARIABLES'
-        self.x = SX.sym('q',self.state_dim,1)
-        self.pos = SX.sym('pos',4,4)
+        self.x = SX.sym('q',self.state_dim,1) #State
+        self.u = SX.sym('u',self.control_dim,1)  # Control
+
         self.fk = self.kdl_kin.symbolic_fk(self.x)
         self.FK = Function('f', [self.x],[self.fk])
         rospy.loginfo("MPC Initialized...")
 
     def mpcStep(self):
         print("MPC_step")
-        print self.FK(self.join_state_)
+        pos_c =  self.FK(self.join_state_)[0:3,3]
+        print pos_c
 
     def spin(self):
         self.thread=thread.start_new_thread(name="mpc", target=self.mpcStep())
         return
 
-    def symbolic_fk(self):
-        T = SX.sym("T", 4, 4)
-        self.FK = self.kdl_kin.symbolic_fk(self.x,"arm_base_link", "arm_wrist_3_link")
-        if self.base_active:
-            T[0, 0] = cos(self.x(2))
-            T[0, 1] = -sin(self.x(2))
-            T[0, 2] = 0.0
-            T[0, 3] = self.x(0)
-            T[1, 0] = sin(self.x(2))
-            T[1, 1] = cos(self.x(2))
-            T[1, 2] = 0.0
-            T[1, 3] = self.x(1)
-            T[2, 0] = 0.0
-            T[2, 1] = 0.0
-            T[2, 2] = 1.0
-            T[2, 3] = 0
-            T[3, 0] = 0.0
-            T[3, 1] = 0.0
-            T[3, 2] = 0.0
-            T[3, 3] = 1.0
-            T_base_ = T
 
 
 

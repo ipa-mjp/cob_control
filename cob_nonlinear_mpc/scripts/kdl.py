@@ -486,10 +486,6 @@ class Kinematics(object):
                 o_n = np.squeeze(np.asarray(self.tf_list[self.num_joints-1][4][:3, 3]))
                 Jvi = np.cross(z0, o_n - o_i)
                 J=np.hstack((Jvi,z0))
-                print J
-
-        print 'Jacobian'
-        print J
 
     def kdl_to_mat(self,m):
         mat =  np.mat(np.zeros((m.rows(), m.columns())))

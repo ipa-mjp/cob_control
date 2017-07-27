@@ -83,6 +83,7 @@ class JointStateSubscriber(Subscriber):
         self.joint_velocities_ = data.velocity
         rospy.loginfo('joint states')
 
+
 class OdometrySubscriber(Subscriber):
 
     def __init__(self, topic_name):
@@ -106,12 +107,17 @@ class OdometrySubscriber(Subscriber):
         self.joint_pos_ = np.array([self.base_position_.x, self.base_position_.y, np.arctan2(t3, t4)])
         return
 
+
 class FrameTrackerSubscriber(Subscriber):
 
     def __init__(self, topic_name):
         super(FrameTrackerSubscriber, self).__init__(topic_name, Pose)
         self.init_ = True
-        self.frame_tracker_sub_ = None
-        self.ref = Pose()
+        self.pos_ref = Pose.position
+        self.q_ref = Pose.orientation
+
     def callback(self, data):
-        self.data = data
+        self.pos_ref = data.position
+        self.q_ref = data.orientation
+        rospy.loginfo('frame_tracker')
+        print self.pos_ref
