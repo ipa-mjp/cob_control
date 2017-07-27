@@ -210,15 +210,12 @@ class Kinematics(object):
 
         fk = SX.eye(4)
         #print 'symbolic FK'
-        print fk
         for i in range(0, len(list)):
             if list[i][1] == 'revolute':
-                print '1'
                 rot = self.create_rotation_matrix_sym(q[i],list[i][3])
-                fk = fk*list[i][2]
-                print '4'
-                fk = fk*rot
-                print '5'
+                print list[i][2]
+                fk = mtimes(fk,list[i][2])
+                fk = mtimes(fk,rot)
             elif list[i][1] == 'prismatic':
                 rospy.loginfo("prismatic")
         print fk

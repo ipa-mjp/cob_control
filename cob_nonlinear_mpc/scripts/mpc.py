@@ -168,18 +168,17 @@ class MPC(object):
         print 'Initializing Kinematic Chain...'
         self.kdl_kin= Kinematics(self.robot, self.chain_base_link, self.chain_tip_link)
         print 'Done initializing Kinematic Chain...'
-        print self.join_state_
-        print 'SYBOLIC VARIABLES'
-        self.x = SX.sym('q',self.state_dim,1)
-        print 'FK'
-        self.FK = self.kdl_kin.symbolic_fk(self.x)
 
+        #print 'SYBOLIC VARIABLES'
+        self.x = SX.sym('q',self.state_dim,1)
+        self.pos = SX.sym('pos',4,4)
+        self.FK = self.kdl_kin.symbolic_fk(self.x)
+        print  self.FK
         rospy.loginfo("MPC Initialized...")
 
     def mpcStep(self):
         print("MPC_step")
-        print self.join_state_
-        print self.kdl_kin.forward2(self.join_state_)
+        print self.FK(SX(self.join_state_))
 
     def spin(self):
         self.thread=thread.start_new_thread(name="mpc", target=self.mpcStep())
