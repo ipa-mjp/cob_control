@@ -48,7 +48,7 @@ class Kinematics(object):
     # @param end_link Name of the end link of the kinematic chain.
     # @param kdl_tree Optional KDL.Tree object to use. If None, one will be generated
     #                          from the URDF.
-    def __init__(self, urdf, base_link, end_link, kdl_tree=None):
+    def __init__(self, urdf, base_link, end_link, root_frame, kdl_tree=None):
         if kdl_tree is None:
             [tree_ok, kdl_tree] = treeFromUrdfModel(urdf)
 
@@ -66,6 +66,7 @@ class Kinematics(object):
 
         self.base_link = base_link
         self.end_link = end_link
+        self.root_frame = root_frame
 
         # record joint information in easy-to-use lists
         self.joint_limits_lower = []
@@ -75,8 +76,7 @@ class Kinematics(object):
         self.joint_types = []
         self.joint_states = []
         self.tf_list = []
-        print base_link
-        print end_link
+
         for jnt_name in self.get_all_joint_names():
             jnt = urdf.joint_map[jnt_name]
 
@@ -211,12 +211,27 @@ class Kinematics(object):
             print "FK KDL failure on end transformation."
         return base_trans * end_trans
 
-    def symbolic_fk(self, q, end_link=None, base_link=None):
+    def symbolic_fk(self, q, end_link=None, base_link=None, root_frame=None,base_active=False):
         list = self.write_to_list()
 
-        fk = SX.eye(4)
-        print 'symbolic FK'
-        j=0
+        try:
+            listner = tf.TransformListener(True, rospy.Duration(40.0))
+            listner.waitForTransform(self.root_frame, self.base_link, rospy.Time(0), rospy.Duration(0.1))
+            (trans, quat) = listner.lookupTransform(self.root_frame, self.base_link,rospy.Time(0))
+            angle = tf.transformations.euler_from_quaternion(quat)
+        except Exception as e:
+            print('Exception fram does not exist in the kinematic chain: ' + str(e))
+
+        root_trans_mat = tf.transformations.compose_matrix(angles=angle, translate=trans)
+
+        fk = mtimes(SX.eye(4),root_trans_mat)
+
+        if base_active:
+            fk = mtimes(SX.eye(4), self.create_planar_joint(q))
+            j=3
+        else:
+            j=0
+
         for i in range(0, len(list)):
             if list[i][1] == 'revolute':
                 rot = self.create_rotation_matrix_sym(q[j],list[i][3])
@@ -230,20 +245,23 @@ class Kinematics(object):
         print fk
         return fk
 
-    def forward2(self, q, end_link=None, base_link=None):
+    def forward2(self, q, end_link=None, base_link=None , root_frame=None):
         list = self.write_to_list()
         print 'forward 2'
-        #try:
-        #    listner = tf.TransformListener(True, rospy.Duration(40.0))
-        #    listner.waitForTransform("base_link", self.base_link, rospy.Time(0), rospy.Duration(0.1))
-        #    (trans, quat) = listner.lookupTransform("base_link", self.base_link,rospy.Time(0))
-        #    angle = tf.transformations.euler_from_quaternion(quat)
-        #except Exception as e:
-        #    print('Exception fram does not exist in the kinematic chain: ' + str(e))
+        print base_link
+        print root_frame
+        try:
+            listner = tf.TransformListener(True, rospy.Duration(40.0))
+            listner.waitForTransform(self.root_frame, self.base_link, rospy.Time(0), rospy.Duration(0.1))
+            (trans, quat) = listner.lookupTransform(self.root_frame, self.base_link,rospy.Time(0))
+            angle = tf.transformations.euler_from_quaternion(quat)
+        except Exception as e:
+            print('Exception fram does not exist in the kinematic chain: ' + str(e))
 
         #root_trans_mat = tf.transformations.compose_matrix(angles=angle, translate=trans)
-        fk = np.identity(4)
-        print list
+        fk= tf.transformations.compose_matrix(angles=angle, translate=trans)
+        #fk = np.identity(4)
+
         #print fk
         j=0
         for i in range(0, len(list)):
@@ -304,6 +322,18 @@ class Kinematics(object):
             rot_mat[1, 0] = sin(angle)
             rot_mat[1, 1] = cos(angle)
         return rot_mat
+
+    def create_planar_joint(self, q):
+        H_mat = SX.eye(4)
+        #angle = angle * pi / 180  # convert deg to rad
+        H_mat[0, 0] = cos(q[2])
+        H_mat[0, 1] = -sin(q[2])
+        H_mat[1, 0] = sin(q[2])
+        H_mat[1, 1] = cos(q[2])
+        H_mat[3, 0] = q[0]
+        H_mat[3, 1] = q[1]
+
+        return H_mat
 
     ##
     # @param Name of joint of which transformation needed
@@ -536,11 +566,11 @@ if __name__ == "__main__":
     if not rospy.is_shutdown():
         #create_kdl_kin("arm_left_base_link", "arm_left_7_link")
         robot = Robot.from_parameter_server()
-        #kdl_kin = Kinematics(robot, "world", "arm_7_link")
-        kdl_kin = Kinematics(robot, "base_footprint", "arm_wrist_3_link")
+        kdl_kin = Kinematics(robot, "arm_base_link", "arm_7_link","world")
+        #kdl_kin = Kinematics(robot, "base_footprint", "arm_wrist_3_link")
         #q = kdl_kin.random_joint_angles()
         q = [0.0,0.0, 0, 0, 0.00, 0.00,0.0]
-        q = [0.0, 0.0, 0, 0, 0.00, 0.00]
+        #q = [0.0, 0.0, 0, 0, 0.00, 0.00]
 
 
         #print kdl_kin.forward(q, "arm_wrist_3_link", "arm_base_link")   # arm_wrist_3_joint
@@ -551,10 +581,10 @@ if __name__ == "__main__":
         #print kdl_kin.forward(q, "arm_shoulder_link", "arm_base_link")  # arm_pan_joint
 
 
-        pose = kdl_kin.forward2(q)
+        pose = kdl_kin.forward2(q,"arm_7_link","arm_base_link","arm_base_link")
         print pose
-        #pose = kdl_kin.forward(q,"world", "arm_7_link")
-        pose = kdl_kin.forward(q, "base_footprint", "arm_wrist_3_link")
+        pose = kdl_kin.forward(q,"arm_base_link", "arm_7_link")
+        #pose = kdl_kin.forward(q, "base_footprint", "arm_wrist_3_link")
         print pose
         J = kdl_kin.compute_jacobian(q)
         print J

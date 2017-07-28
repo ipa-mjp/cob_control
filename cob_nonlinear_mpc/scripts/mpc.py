@@ -158,6 +158,12 @@ class MPC(object):
             rospy.logwarn('Could not find parameter chain_base_link.')
             exit(-1)
 
+        if rospy.has_param(ns + '/root_frame'):
+            self.root_frame = rospy.get_param(ns +'/root_frame')
+        else:
+            rospy.logwarn('Could not find parameter root_frame.')
+            exit(-1)
+
         if rospy.has_param(ns + '/frame_tracker/target_frame'):
             self.tracking_frame = rospy.get_param(ns+'/frame_tracker/target_frame')
         else:
@@ -166,14 +172,15 @@ class MPC(object):
 
         self.robot = Robot.from_parameter_server()
         print 'Initializing Kinematic Chain...'
-        self.kdl_kin= Kinematics(self.robot, self.chain_base_link, self.chain_tip_link)
-        print 'Done initializing Kinematic Chain...'
+        self.kdl_kin= Kinematics(self.robot, self.chain_base_link, self.chain_tip_link,self.root_frame)
+        print 'Done initializing Kinematic Chain from ' + self.chain_base_link + ' to ' + self.chain_tip_link + ' in the ' + self.root_frame
 
         #print 'SYBOLIC VARIABLES'
         self.x = SX.sym('q',self.state_dim,1) #State
         self.u = SX.sym('u',self.control_dim,1)  # Control
 
-        self.fk = self.kdl_kin.symbolic_fk(self.x)
+        self.fk = self.kdl_kin.symbolic_fk(self.x,base_active=self.base_active)
+
         self.FK = Function('f', [self.x],[self.fk])
         rospy.loginfo("MPC Initialized...")
 
@@ -185,7 +192,5 @@ class MPC(object):
     def spin(self):
         self.thread=thread.start_new_thread(name="mpc", target=self.mpcStep())
         return
-
-
 
 
