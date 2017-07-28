@@ -215,7 +215,7 @@ class Kinematics(object):
         list = self.write_to_list()
 
         fk = SX.eye(4)
-        #print 'symbolic FK'
+        print 'symbolic FK'
         j=0
         for i in range(0, len(list)):
             if list[i][1] == 'revolute':
@@ -226,7 +226,7 @@ class Kinematics(object):
             elif list[i][1] == 'prismatic':
                 rospy.loginfo("prismatic")
             elif list[i][1] == 'fixed':
-                fk = np.dot(fk, list[i][2])
+                fk = mtimes(fk, list[i][2])
         print fk
         return fk
 
