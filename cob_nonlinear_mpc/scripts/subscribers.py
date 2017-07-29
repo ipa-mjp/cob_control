@@ -79,9 +79,9 @@ class JointStateSubscriber(Subscriber):
 
     def callback(self, data):
         self.data=data
-        self.joint_positions_ = data.position
-        self.joint_velocities_ = data.velocity
-        rospy.loginfo('joint states')
+        self.joint_positions_ = np.array(data.position)
+        self.joint_velocities_ = np.array(data.velocity)
+        #rospy.loginfo('joint states')
 
 
 class OdometrySubscriber(Subscriber):
@@ -97,7 +97,7 @@ class OdometrySubscriber(Subscriber):
         self.base_position_ = data.pose.pose.position
         self.base_orientation_ = data.pose.pose.orientation
         self.convert_orientation_to_joint_pos()
-        rospy.loginfo('odometry')
+        #rospy.loginfo('odometry')
 
     def convert_orientation_to_joint_pos(self):
         #Conversion from quaternion to joint angle

@@ -76,6 +76,7 @@ class Kinematics(object):
         self.joint_types = []
         self.joint_states = []
         self.tf_list = []
+        self.tf_list_sym = []
 
         for jnt_name in self.get_all_joint_names():
             jnt = urdf.joint_map[jnt_name]
@@ -214,22 +215,23 @@ class Kinematics(object):
     def symbolic_fk(self, q, end_link=None, base_link=None, root_frame=None,base_active=False):
         list = self.write_to_list()
 
-        try:
-            listner = tf.TransformListener(True, rospy.Duration(40.0))
-            listner.waitForTransform(self.root_frame, self.base_link, rospy.Time(0), rospy.Duration(0.1))
-            (trans, quat) = listner.lookupTransform(self.root_frame, self.base_link,rospy.Time(0))
-            angle = tf.transformations.euler_from_quaternion(quat)
-        except Exception as e:
-            print('Exception fram does not exist in the kinematic chain: ' + str(e))
-
-        root_trans_mat = tf.transformations.compose_matrix(angles=angle, translate=trans)
-
-        fk = mtimes(SX.eye(4),root_trans_mat)
+        fk = SX.eye(4)
 
         if base_active:
-            fk = mtimes(SX.eye(4), self.create_planar_joint(q))
+            fk = mtimes(fk, self.create_planar_joint(q))
             j=3
         else:
+            try:
+                listner = tf.TransformListener(True, rospy.Duration(40.0))
+                listner.waitForTransform(self.root_frame, self.base_link, rospy.Time(0), rospy.Duration(2.0))
+                (trans, quat) = listner.lookupTransform(self.root_frame, self.base_link, rospy.Time(0))
+                angle = tf.transformations.euler_from_quaternion(quat)
+            except Exception as e:
+                print('Exception fram does not exist in the kinematic chain: ' + str(e))
+
+            root_trans_mat = tf.transformations.compose_matrix(angles=angle, translate=trans)
+
+            fk = mtimes(SX.eye(4), root_trans_mat)
             j=0
 
         for i in range(0, len(list)):
@@ -237,12 +239,13 @@ class Kinematics(object):
                 rot = self.create_rotation_matrix_sym(q[j],list[i][3])
                 fk = mtimes(fk,list[i][2])
                 fk = mtimes(fk,rot)
+                self.tf_list_sym.append((list[i][0], list[i][1], list[i][2], list[i][3], fk))
                 j = j + 1
             elif list[i][1] == 'prismatic':
                 rospy.loginfo("prismatic")
             elif list[i][1] == 'fixed':
                 fk = mtimes(fk, list[i][2])
-        print fk
+                self.tf_list_sym.append((list[i][0], list[i][1], list[i][2], list[i][3], fk))
         return fk
 
     def forward2(self, q, end_link=None, base_link=None , root_frame=None):
@@ -252,7 +255,7 @@ class Kinematics(object):
         print root_frame
         try:
             listner = tf.TransformListener(True, rospy.Duration(40.0))
-            listner.waitForTransform(self.root_frame, self.base_link, rospy.Time(0), rospy.Duration(0.1))
+            listner.waitForTransform(self.root_frame, self.base_link, rospy.Time(0), rospy.Duration(1.0))
             (trans, quat) = listner.lookupTransform(self.root_frame, self.base_link,rospy.Time(0))
             angle = tf.transformations.euler_from_quaternion(quat)
         except Exception as e:
@@ -330,8 +333,8 @@ class Kinematics(object):
         H_mat[0, 1] = -sin(q[2])
         H_mat[1, 0] = sin(q[2])
         H_mat[1, 1] = cos(q[2])
-        H_mat[3, 0] = q[0]
-        H_mat[3, 1] = q[1]
+        H_mat[0, 3] = q[0]
+        H_mat[1, 3] = q[1]
 
         return H_mat
 
@@ -496,6 +499,63 @@ class Kinematics(object):
                     # z0 = np.squeeze(np.asarray( self.forward_kinematics(q, joint.child, joint.parent)[:3,2]))
                     o_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 3]))
                     o_n = np.squeeze(np.asarray(self.tf_list[len(self.tf_list)-1][4][:3, 3]))
+                    Jvi = np.cross(z0, o_n - o_i)
+                    J=np.hstack((Jvi,z0))
+                    j=j+1
+                else:
+                    if self.tf_list[i][1] == 'revolute':
+                        rospy.loginfo("Type of joint is revolute")
+                        axis = self.tf_list[i][3]
+                        if axis == [1, 0, 0]:
+                            z_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 0]))
+                            o_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 3]))
+                            o_n = np.squeeze(np.asarray(self.tf_list[len(self.tf_list) - 1][4][:3, 3]))
+                            print "child: ", self.tf_list[i][0]
+                            print "joint_end_child: ", self.tf_list[len(self.tf_list)-1][0]
+                            print "joint_start_parent: ", self.tf_list[i-1][0]
+                            print o_i
+                            print "z_i: ", z_i
+                            print "Jvi: ", np.cross(z_i, o_n - o_i)
+                            Jvi = np.cross(z_i, o_n - o_i)
+                            Jwi = z_i
+                            J = np.column_stack((J, np.hstack((Jvi, Jwi))))
+                        elif axis == [0, 1, 0]:
+                            z_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 1]))
+                            o_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 3]))
+                            o_n = np.squeeze(np.asarray(self.tf_list[len(self.tf_list) - 1][4][:3, 3]))
+                            print "Jvi: ", np.cross(z_i, o_n - o_i)
+                            Jvi = np.cross(z_i, o_n - o_i)
+                            Jwi = z_i
+                            J = np.column_stack((J, np.hstack((Jvi, Jwi))))
+                        elif axis == [0, 0, 1]:
+                            z_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 2]))
+                            o_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 3]))
+                            o_n = np.squeeze(np.asarray(self.tf_list[len(self.tf_list) - 1][4][:3, 3]))
+                            print "Jvi: ", np.cross(z_i, o_n - o_i)
+                            print o_i
+                            print o_n
+                            Jvi = np.cross(z_i, o_n - o_i)
+                            Jwi = z_i
+                            J = np.column_stack((J,np.hstack((Jvi, Jwi))))
+                    else:
+                        rospy.loginfo("Type of joint is other")
+        return J
+
+    def compute_jacobian_sym(self, q):
+        #J = np.mat(np.zeros((6, self.num_joints)))
+        J = SX.zeros(6, self.num_joints)
+        Jvi = SX.zeros(3, 1)
+        Jwi = SX.zeros(3, 1)
+        j=0
+        for i in range(0,len(self.tf_list)):
+            if self.tf_list[i][1] == 'fixed':
+                rospy.loginfo("Type of joint is fixed")
+            else:
+                if j is 0:
+                    z0 = np.array([0.0, 0.0, 1.0])
+                    # z0 = np.squeeze(np.asarray( self.forward_kinematics(q, joint.child, joint.parent)[:3,2]))
+                    o_i = self.tf_list[i][4][:3, 3]
+                    o_n = self.tf_list[len(self.tf_list)-1][4][:3, 3]
                     Jvi = np.cross(z0, o_n - o_i)
                     J=np.hstack((Jvi,z0))
                     j=j+1

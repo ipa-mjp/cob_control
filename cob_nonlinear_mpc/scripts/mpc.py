@@ -178,7 +178,7 @@ class MPC(object):
         #print 'SYBOLIC VARIABLES'
         self.x = SX.sym('q',self.state_dim,1) #State
         self.u = SX.sym('u',self.control_dim,1)  # Control
-
+        print 'Symbolic forward kinematics'
         self.fk = self.kdl_kin.symbolic_fk(self.x,base_active=self.base_active)
 
         self.FK = Function('f', [self.x],[self.fk])
@@ -186,6 +186,7 @@ class MPC(object):
 
     def mpcStep(self):
         print("MPC_step")
+        #print self.join_state_
         pos_c =  self.FK(self.join_state_)[0:3,3]
         print pos_c
 

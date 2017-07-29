@@ -69,8 +69,10 @@ class CobMPC(object):
 
     def getJointState(self):
         if self.controller.base_active:
-            self.controller.join_state_=np.array([self.odometry_sub.joint_pos_,self.joint_sub.joint_positions_])
+            self.controller.join_state_=np.hstack([self.odometry_sub.joint_pos_,self.joint_sub.joint_positions_])
+            rospy.loginfo(self.odometry_sub.joint_pos_)
             #rospy.loginfo(self.joint_sub.joint_positions_)
+            #rospy.loginfo(self.controller.join_state_)
         else:
             self.controller.join_state_ = self.joint_sub.joint_positions_
             #rospy.loginfo(self.joint_sub.joint_positions_)
