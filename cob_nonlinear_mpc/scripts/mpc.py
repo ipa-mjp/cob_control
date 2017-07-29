@@ -70,6 +70,8 @@ class MPC(object):
         self.thread = None
         #SYBOLIC VARIABLES
         self.x = None
+        self.u = None
+        self.xdot = None
 
         #SYMBOLIC FUNCTIONS
         self.FK = None
@@ -178,6 +180,10 @@ class MPC(object):
         #print 'SYBOLIC VARIABLES'
         self.x = SX.sym('q',self.state_dim,1) #State
         self.u = SX.sym('u',self.control_dim,1)  # Control
+
+        # Model equations
+        self.xdot = self.u
+
         print 'Symbolic forward kinematics'
         self.fk = self.kdl_kin.symbolic_fk(self.x,base_active=self.base_active)
 
@@ -187,14 +193,32 @@ class MPC(object):
     def mpcStep(self,ref):
         print("MPC_step")
         #print self.join_state_
-        pos_c =  self.FK(self.join_state_)[0:3,3]
-        print pos_c
+        pos_c =  self.fk[0:3,3]
         pos_ref = SX([ref.x,ref.y,ref.z])
         e=pos_ref-pos_c
-        print e
+
+        # Objective term
+        L = dot(e,e)
+        F = self.create_integrator(L)
+        print F
+        print 'Evaluate at a test point'
+        print self.join_state_
+        print self.control_dim
+        #print np.zeros(self.control_dim,1)
+        Fk = F(x0=self.join_state_, p=[0,0,0,0,0,0,0])
+        print F
+        print(Fk['xf'])
+        print(Fk['qf'])
+
 
     def spin(self):
         self.thread=thread.start_new_thread(name="mpc", target=self.mpcStep())
         return
 
-
+    def create_integrator(self,L):
+        # Formulate discrete time dynamics
+        # CVODES from the SUNDIALS suite
+        dae = {'x': self.x, 'p': self.u, 'ode': self.xdot, 'quad': L}
+        opts = {'tf': self.time_horizon / self.shooting_nodes}
+        F = integrator('F', 'cvodes', dae, opts)
+        return F
