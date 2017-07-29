@@ -69,7 +69,7 @@ if __name__ == '__main__':
     try:
         #thread.start_new_thread(loop, ())
         #thread.start_new_thread(loop2, ())
-        controller = CobMPC(ns="arm_left")
+        controller = CobMPC(ns="arm")
         controller.spin()
     except:
         print "Error: unable to start thread"

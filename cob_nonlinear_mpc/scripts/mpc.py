@@ -184,11 +184,14 @@ class MPC(object):
         self.FK = Function('f', [self.x],[self.fk])
         rospy.loginfo("MPC Initialized...")
 
-    def mpcStep(self):
+    def mpcStep(self,ref):
         print("MPC_step")
         #print self.join_state_
         pos_c =  self.FK(self.join_state_)[0:3,3]
         print pos_c
+        pos_ref = SX([ref.x,ref.y,ref.z])
+        e=pos_ref-pos_c
+        print e
 
     def spin(self):
         self.thread=thread.start_new_thread(name="mpc", target=self.mpcStep())

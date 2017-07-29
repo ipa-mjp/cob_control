@@ -119,5 +119,4 @@ class FrameTrackerSubscriber(Subscriber):
     def callback(self, data):
         self.pos_ref = data.position
         self.q_ref = data.orientation
-        rospy.loginfo('frame_tracker')
-        print self.pos_ref
+        #rospy.loginfo('frame_tracker')
