@@ -186,13 +186,17 @@ class MPC(object):
 
         print 'Symbolic forward kinematics'
         self.fk = self.kdl_kin.symbolic_fk(self.x,base_active=self.base_active)
+        self.fk = self.kdl_kin.forward2(self.join_state_, self.chain_base_link,self.chain_tip_link)
         self.J = self.kdl_kin.compute_jacobian_sym(self.x)
         print
         self.FK = Function('f', [self.x],[self.fk])
         self.Jacobian = Function('J', [self.x], [self.J])
+        self.Jac = Function('Jac', [self.x],[jacobian(self.fk,self.x)])
 
         print (self.Jacobian(self.join_state_))
         print self.kdl_kin.compute_jacobian(self.join_state_)
+        print 'jacobian casadi'
+        print self.Jac(self.join_state_)
 
         self.rate = 10
         rospy.loginfo("MPC Initialized...")

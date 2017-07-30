@@ -98,6 +98,8 @@ class Kinematics(object):
                 self.joint_safety_upper.append(None)
             self.joint_types.append((jnt.type , jnt.axis))
 
+        #
+
         def replace_none(x, v):
             if x is None:
                 return v
@@ -504,18 +506,11 @@ class Kinematics(object):
                     j=j+1
                 else:
                     if self.tf_list[i][1] == 'revolute':
-                        rospy.loginfo("Type of joint is revolute")
                         axis = self.tf_list[i][3]
                         if axis == [1, 0, 0]:
                             z_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 0]))
                             o_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 3]))
                             o_n = np.squeeze(np.asarray(self.tf_list[len(self.tf_list) - 1][4][:3, 3]))
-                            print "child: ", self.tf_list[i][0]
-                            print "joint_end_child: ", self.tf_list[len(self.tf_list)-1][0]
-                            print "joint_start_parent: ", self.tf_list[i-1][0]
-                            print o_i
-                            print "z_i: ", z_i
-                            print "Jvi: ", np.cross(z_i, o_n - o_i)
                             Jvi = np.cross(z_i, o_n - o_i)
                             Jwi = z_i
                             J = np.column_stack((J, np.hstack((Jvi, Jwi))))
@@ -523,7 +518,6 @@ class Kinematics(object):
                             z_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 1]))
                             o_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 3]))
                             o_n = np.squeeze(np.asarray(self.tf_list[len(self.tf_list) - 1][4][:3, 3]))
-                            print "Jvi: ", np.cross(z_i, o_n - o_i)
                             Jvi = np.cross(z_i, o_n - o_i)
                             Jwi = z_i
                             J = np.column_stack((J, np.hstack((Jvi, Jwi))))
@@ -531,9 +525,6 @@ class Kinematics(object):
                             z_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 2]))
                             o_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 3]))
                             o_n = np.squeeze(np.asarray(self.tf_list[len(self.tf_list) - 1][4][:3, 3]))
-                            print "Jvi: ", np.cross(z_i, o_n - o_i)
-                            print o_i
-                            print o_n
                             Jvi = np.cross(z_i, o_n - o_i)
                             Jwi = z_i
                             J = np.column_stack((J,np.hstack((Jvi, Jwi))))
