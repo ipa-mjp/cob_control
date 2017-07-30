@@ -31,6 +31,7 @@ from setuptools.command.saveopts import saveopts
 import rospy
 import matplotlib.pyplot as plt
 from subscribers import *
+from publishers import *
 import thread
 from mpc import MPC
 
@@ -41,9 +42,10 @@ class CobMPC(object):
         self.odometry_sub = OdometrySubscriber('/base/odometry_controller/odometry')
         self.joint_sub = JointStateSubscriber('/' + ns + '/joint_states')
         self.frame_tracker = FrameTrackerSubscriber('/' + ns + '/command_pose')
+        self.joint_pub = JointStatePublisher('/arm/joint_group_velocity_controller/command')
         self.controller = MPC(ns=ns)
         self.thread = None
-        self.rate= rospy.Rate(50)  # 10hz
+        self.rate= rospy.Rate(10)  # 10hz
 
     def spin(self):
         self.thread = thread.start_new_thread(name="cob_mpc", target=self.loop())

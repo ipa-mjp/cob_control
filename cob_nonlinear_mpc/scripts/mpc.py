@@ -188,25 +188,45 @@ class MPC(object):
         self.fk = self.kdl_kin.symbolic_fk(self.x,base_active=self.base_active)
 
         self.FK = Function('f', [self.x],[self.fk])
+
+        self.rate = 10
         rospy.loginfo("MPC Initialized...")
 
     def mpcStep(self,ref):
         print("MPC_step")
-        #print self.join_state_
         pos_c =  self.fk[0:3,3]
         pos_ref = [ref.x,ref.y,ref.z]
         e=pos_ref-pos_c
-
-        # Objective term
-        L = e**2
+        #print 'Objective term'
+        L = dot(e,e)
         I = self.create_integrator(L)
 
         #print 'Evaluate at a test point'
         #Fk = F(x0=self.join_state_, p=[0,0,0,0,0,0,0])
-        print F
-        print(Fk['xf'])
-        print(Fk['qf'])
+        print 'All controls'
+        U = MX.sym("U",7)
+        print 'Construct graph of integrator calls'
+        X = self.join_state_ # Initial state
+        J = 0
+        for k in range(1):
+            print 'Integrator...'
+            Ik = I(x0=X, p=U[:,k])
+            X = Ik['xf']
+            J += Ik['qf']
+            print 'Sum up quadratures'
 
+        print 'Allocate an NLP solver'
+        nlp = {'x': U, 'f': J, 'g': X}
+        opts = {"ipopt.linear_solver": "ma27"}
+        solver = nlpsol("solver", "ipopt", nlp, opts)
+
+        print 'Pass bounds, initial guess and solve NLP'
+        sol = solver(lbx=self.kdl_kin.joint_limits_lower,  # Lower variable bound
+                     ubx=self.kdl_kin.joint_limits_upper,  # Upper variable bound
+                     lbg=self.kdl_kin.joint_limits_lower,  # Lower constraint bound
+                     ubg=self.kdl_kin.joint_limits_upper,  # Upper constraint bound
+                     x0=self.join_state_)  # Initial guess
+        w_opt = sol['x']
 
     def spin(self):
         self.thread=thread.start_new_thread(name="mpc", target=self.mpcStep())
