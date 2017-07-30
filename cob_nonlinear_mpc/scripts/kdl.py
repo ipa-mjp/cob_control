@@ -547,22 +547,22 @@ class Kinematics(object):
         Jvi = SX.zeros(3, 1)
         Jwi = SX.zeros(3, 1)
         j=0
-        for i in range(0,len(self.tf_list)):
-            if self.tf_list[i][1] == 'fixed':
+        for i in range(0,len(self.tf_list_sym)):
+            if self.tf_list_sym[i][1] == 'fixed':
                 rospy.loginfo("Type of joint is fixed")
             else:
                 if j is 0:
                     z0 = np.array([0.0, 0.0, 1.0])
                     # z0 = np.squeeze(np.asarray( self.forward_kinematics(q, joint.child, joint.parent)[:3,2]))
-                    o_i = self.tf_list[i][4][:3, 3]
-                    o_n = self.tf_list[len(self.tf_list)-1][4][:3, 3]
-                    Jvi = np.cross(z0, o_n - o_i)
-                    J=np.hstack((Jvi,z0))
+                    o_i = self.tf_list_sym[i][4][:3, 3]
+                    o_n = self.tf_list_sym[len(self.tf_list_sym)-1][4][:3, 3]
+                    Jvi = cross(z0, o_n - o_i)
+                    J=vertcat(Jvi,z0)
                     j=j+1
                 else:
-                    if self.tf_list[i][1] == 'revolute':
+                    if self.tf_list_sym[i][1] == 'revolute':
                         rospy.loginfo("Type of joint is revolute")
-                        axis = self.tf_list[i][3]
+                        axis = self.tf_list_sym[i][3]
                         if axis == [1, 0, 0]:
                             z_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 0]))
                             o_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 3]))
@@ -585,17 +585,15 @@ class Kinematics(object):
                             Jwi = z_i
                             J = np.column_stack((J, np.hstack((Jvi, Jwi))))
                         elif axis == [0, 0, 1]:
-                            z_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 2]))
-                            o_i = np.squeeze(np.asarray(self.tf_list[i][4][:3, 3]))
-                            o_n = np.squeeze(np.asarray(self.tf_list[len(self.tf_list) - 1][4][:3, 3]))
-                            print "Jvi: ", np.cross(z_i, o_n - o_i)
-                            print o_i
-                            print o_n
-                            Jvi = np.cross(z_i, o_n - o_i)
+                            z_i = self.tf_list_sym[i][4][:3, 2]
+                            o_i = self.tf_list_sym[i][4][:3, 3]
+                            o_n = self.tf_list_sym[len(self.tf_list_sym) - 1][4][:3, 3]
+                            Jvi = cross(z_i, o_n - o_i)
                             Jwi = z_i
-                            J = np.column_stack((J,np.hstack((Jvi, Jwi))))
+                            J = horzcat(J,vertcat(Jvi, Jwi))
                     else:
                         rospy.loginfo("Type of joint is other")
+        print 'sym jacobian'
         return J
 
     def kdl_to_mat(self,m):

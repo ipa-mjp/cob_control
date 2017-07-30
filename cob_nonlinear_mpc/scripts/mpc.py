@@ -72,7 +72,7 @@ class MPC(object):
         self.x = None
         self.u = None
         self.xdot = None
-
+        self.opts = {"ipopt.linear_solver": "ma27"}
         #SYMBOLIC FUNCTIONS
         self.FK = None
 
@@ -186,8 +186,13 @@ class MPC(object):
 
         print 'Symbolic forward kinematics'
         self.fk = self.kdl_kin.symbolic_fk(self.x,base_active=self.base_active)
-
+        self.J = self.kdl_kin.compute_jacobian_sym(self.x)
+        print
         self.FK = Function('f', [self.x],[self.fk])
+        self.Jacobian = Function('J', [self.x], [self.J])
+
+        print (self.Jacobian(self.join_state_))
+        print self.kdl_kin.compute_jacobian(self.join_state_)
 
         self.rate = 10
         rospy.loginfo("MPC Initialized...")
@@ -208,17 +213,21 @@ class MPC(object):
         print 'Construct graph of integrator calls'
         X = self.join_state_ # Initial state
         J = 0
-        for k in range(1):
-            print 'Integrator...'
-            Ik = I(x0=X, p=U[:,k])
+        w = []
+        for k in range(5):
+            # New NLP variable for the control
+            Uk = MX.sym('U_' + str(k))
+            w += [Uk]
+            Ik = I(x0=X, p=Uk)
             X = Ik['xf']
             J += Ik['qf']
             print 'Sum up quadratures'
 
         print 'Allocate an NLP solver'
-        nlp = {'x': U, 'f': J, 'g': X}
-        opts = {"ipopt.linear_solver": "ma27"}
-        solver = nlpsol("solver", "ipopt", nlp, opts)
+        print J
+        nlp = {'x': vertcat(*w), 'f': J, 'g': X}
+
+        solver = nlpsol("solver", "ipopt", nlp, self.opts)
 
         print 'Pass bounds, initial guess and solve NLP'
         sol = solver(lbx=self.kdl_kin.joint_limits_lower,  # Lower variable bound
