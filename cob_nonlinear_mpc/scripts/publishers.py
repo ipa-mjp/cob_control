@@ -70,7 +70,6 @@ class JointStatePublisher(Publisher):
 
     def publish(self, data):
         self.publisher_.publish(data)
-        print("Hello")
 
 class OdometryPublisher(Publisher):
 

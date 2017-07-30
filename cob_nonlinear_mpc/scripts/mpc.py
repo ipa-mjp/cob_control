@@ -228,6 +228,8 @@ class MPC(object):
                      x0=self.join_state_)  # Initial guess
         w_opt = sol['x']
 
+        return w_opt
+
     def spin(self):
         self.thread=thread.start_new_thread(name="mpc", target=self.mpcStep())
         return

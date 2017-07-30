@@ -47,7 +47,10 @@ q = Float64MultiArray()
 def loop():
     rate = rospy.Rate(100)  # 10hz
     joint_pub.open()
+    q.data = np.array([0.0,0.0,0.0,0.0,0.0,0.0,0.0])
     while not rospy.is_shutdown():
+        q.data=q.data+0.001*np.array([1.0,1.0,1.0,1.0,1.0,1.0,1.0])
+        print 'publishing'
         joint_pub.publish(q)
         rate.sleep()
     thread.exit_thread()
@@ -66,6 +69,7 @@ if __name__ == '__main__':
     #odometry_sub.open()
     #q.data=joint_sub.data.velocity
     # Create two threads as follows
+    #loop()
     try:
         #thread.start_new_thread(loop, ())
         #thread.start_new_thread(loop2, ())

@@ -46,6 +46,7 @@ class CobMPC(object):
         self.controller = MPC(ns=ns)
         self.thread = None
         self.rate= rospy.Rate(10)  # 10hz
+        self.q_dot = Float64MultiArray()
 
     def spin(self):
         self.thread = thread.start_new_thread(name="cob_mpc", target=self.loop())
@@ -54,6 +55,7 @@ class CobMPC(object):
         rospy.loginfo('cob_mpc loop')
         self.joint_sub.open()
         self.frame_tracker.open()
+        self.joint_pub.open()
         if self.controller.base_active:
             self.odometry_sub.open()
         while not len(self.joint_sub.joint_positions_):
@@ -63,7 +65,8 @@ class CobMPC(object):
 
         while not rospy.is_shutdown():
             self.getJointState()
-            self.controller.mpcStep(self.frame_tracker.pos_ref)
+            self.q_dot.data = np.array(self.controller.mpcStep(self.frame_tracker.pos_ref))
+            self.joint_pub.publish(self.q_dot)
             self.rate.sleep()
             pass
         #self.thread.thread.exit_thread()
