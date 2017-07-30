@@ -194,18 +194,15 @@ class MPC(object):
         print("MPC_step")
         #print self.join_state_
         pos_c =  self.fk[0:3,3]
-        pos_ref = SX([ref.x,ref.y,ref.z])
+        pos_ref = [ref.x,ref.y,ref.z]
         e=pos_ref-pos_c
 
         # Objective term
-        L = dot(e,e)
-        F = self.create_integrator(L)
-        print F
-        print 'Evaluate at a test point'
-        print self.join_state_
-        print self.control_dim
-        #print np.zeros(self.control_dim,1)
-        Fk = F(x0=self.join_state_, p=[0,0,0,0,0,0,0])
+        L = e**2
+        I = self.create_integrator(L)
+
+        #print 'Evaluate at a test point'
+        #Fk = F(x0=self.join_state_, p=[0,0,0,0,0,0,0])
         print F
         print(Fk['xf'])
         print(Fk['qf'])
@@ -220,5 +217,5 @@ class MPC(object):
         # CVODES from the SUNDIALS suite
         dae = {'x': self.x, 'p': self.u, 'ode': self.xdot, 'quad': L}
         opts = {'tf': self.time_horizon / self.shooting_nodes}
-        F = integrator('F', 'cvodes', dae, opts)
-        return F
+        I = integrator('F', 'cvodes', dae, opts)
+        return I
