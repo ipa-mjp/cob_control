@@ -17,7 +17,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 find_package(Ceres REQUIRED)
 find_package(ACADO REQUIRED)
 find_package(CASADI REQUIRED)
-find_package(IPOPT REQUIRED)
+#find_package(IPOPT REQUIRED)
 
 message("-- Found Ceres version ${CERES_VERSION}: ${CERES_INCLUDE_DIRS}")
 
