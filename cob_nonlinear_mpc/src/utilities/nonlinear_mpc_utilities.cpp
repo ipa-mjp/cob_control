@@ -41,7 +41,8 @@
 #include <cob_srvs/SetString.h>
 #include <string>
 #include <Eigen/Dense>
-#include <casadi/core/function/sx_function.hpp>
+//#include <casadi/core/function/sx_function.hpp>
+#include <casadi/core/sx_function.hpp>
 #include <stdlib.h>
 
 bool CobNonlinearMPC::process_KDL_tree(){
