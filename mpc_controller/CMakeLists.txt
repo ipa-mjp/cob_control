@@ -33,9 +33,23 @@ include_directories(include ${catkin_INCLUDE_DIRS} ${EIGEN_INCLUDE_DIRS} ${oroco
 FIND_LIBRARY(libacado libacado_toolkit_s.so ${ACADO_DIR}/build/lib)
 
 
+add_library(predictive_manipulation
+  src/kinematics.cpp
+)
+
+
 ## add executable
-add_executable(pd_manipulation_node src/pd_trajectory_generator_node.cpp)
+add_executable(pd_manipulation_node 
+	src/pd_trajectory_generator_node.cpp
+)
+
+add_dependencies(predictive_manipulation ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(pd_manipulation_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 FIND_LIBRARY(libacado libacado_toolkit_s.so ${ACADO_DIR}/build/lib)
-target_link_libraries(pd_manipulation_node ${catkin_LIBRARIES} ${orocos_kdl_LIBRARIES} ${libacado})
+target_link_libraries(pd_manipulation_node 
+	${catkin_LIBRARIES} 
+	${orocos_kdl_LIBRARIES} 
+	${libacado}
+	predictive_manipulation	
+)

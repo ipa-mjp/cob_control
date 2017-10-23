@@ -7,55 +7,88 @@
 
 int main(int argc, char **argv)
 {
-	ros::init(argc, argv, "pd_manipulation_node");
+	ros::init(argc, argv, "controller_node");
 	ros::NodeHandle nh;
 
 	using namespace ACADO;
 
-	DifferentialState		s,v,m		;	//the differential states
-	Control 		  		u			;	//the control input u
-	Parameter				T			;	//the time horizon T
-	DifferentialEquation	f( 0.0, T)	;	//the differential equation
-
+	DifferentialState		theta, angular_vel		;	//the differential states
+	Control 		  		angular_acc				;	//the control input u
+	Parameter				T						;	//the time horizon T
+	DifferentialEquation	f						;	//the differential equation
+	std::cout<<"\033[36;1m"<<"Hello"<<"\033[36;0m"<<std::endl;
 	//----------------------------------------------------------------------
-	OCP ocp( 0.0, T)					;	//time horizon of the OCP: [0,T]
-	ocp.minimizeMayerTerm( T )			;	//the time T should be optimized
 
-	f	<<	dot(s) == v					;	//an implementation
-	f	<<	dot(v) == (u-0.2*v*v)/m		;	//of the model equations
-	f	<<	dot(m) == -0.01*u*u			;	//for the rocket.
+	f	<<	dot(theta) == angular_vel			;	//an implementation
+	f	<<	dot(angular_vel) == angular_acc		;	//of the model equations
 
-	//set initial values, end values or set equalities constraints
-	ocp.subjectTo( f )					;	//minimize T s.t the model,
-	ocp.subjectTo( AT_START, s == 0.0 )	;	//the initial values for s,
-	ocp.subjectTo( AT_START, v == 0.0 )	;	//the initial values for v,
-	ocp.subjectTo( AT_START, m == 1.0 )	;	//the initial values for m,
 
-	ocp.subjectTo( AT_END, s == 10.0 )	;	//the end values for s,
-	ocp.subjectTo( AT_END, v == 0.0 )	;	//the end values for vs,
+	//DEFINE LEAST SQUARE FUNCTION
+	Function h;
 
-	//set inequalities constraints
-	ocp.subjectTo( -0.1 <= v <= 1.7 )	;	//as well as the bounds on v
-	ocp.subjectTo( -1.1 <= u <= 1.1 )	;	//as well as the bounds on control input u
-	ocp.subjectTo(  5.0 <= T <= 15.0 )	;	//as well as the bounds on the time horizon T
+	h << theta;
+	h << angular_vel;
+	h << angular_acc;
 
-	//--------------------------------------------------------------------------
-	GnuplotWindow window				;	//visualize the results in a
-	window.addSubplot( s, "DISTANCE s")	;	// Gnuplot window.
-	window.addSubplot( v, "VELOCITY v")	;	// Gnuplot window.
-	window.addSubplot( m, "MASS m")		;	// Gnuplot window.
-	window.addSubplot( u, "CONTROL u")	;	// Gnuplot window.
 
-	//--------------------------------------------------------------------------
+	//LSQ coefficient matrix
+	DMatrix Q(5,5);
+	Q(0,0) = 10.0;
+	Q(1,1) = 10.0;
+	Q(2,2) = 1.0;
+	Q(3,3) = 1.0;
+	Q(4,4) = 1.0e-8;
 
-	OptimizationAlgorithm algorithm(ocp);	//construct optimization algorithm,
+	//Reference
+	DVector ref_vec(5);
+	ref_vec.setAll(0.0);
 
-	//algorithm.set( MAX_NUM_ITERATIONS, 20)					;	//set number of iteration as 20.0
-	//algorithm.set( HESSIAN_APPROXIMATION, EXACT_HESSIAN )	;	//Approximation of hessian is nothing but exact
-	//algorithm.set( HESSIAN_PROJECTION_FACTOR, 2.0)			;	//hessian factor 1.0
 
-	algorithm	<<	window				;	//flush the plot window,
-	algorithm.solve()					;	//and solve the problem.
+	//DEFINE AN OPTIMAL CONTROL PROBLEM:
+	const double tStart = 0.0;
+	const double tEnd = 1.0;
+
+	OCP ocp ( tStart, tEnd , 5);
+	ocp.minimizeLSQ( Q, h, ref_vec);
+
+	ocp.subjectTo( f )						;
+	ocp.subjectTo(	0 <= angular_acc <= 3 )	;
+
+	//SETTING UP THE REAL-TIME ALGORITHM
+	//-------------------------------------------------------------------------
+	RealTimeAlgorithm alg ( ocp, 0.025);
+	alg.set(  MAX_NUM_ITERATIONS, 1 );
+	alg.set( PLOT_RESOLUTION, MEDIUM );
+
+	GnuplotWindow window										;	//visualize the results in a
+	window.addSubplot( theta, "THETA th")						;	// Gnuplot window.
+	window.addSubplot( angular_vel, "VELOCITY omega")			;	// Gnuplot window.
+	window.addSubplot( angular_acc, "ACCELERATION m/s^2")		;	// Gnuplot window.
+
+	alg	<< window;
+
+	//	SETUP CONTROLLER AND PERFORM A STEP:
+	//------------------------------------------------------------------------
+	//StaticReferenceTrajectory zeroReferance ( "/home/bfb-ws/catkin_ws/src/cob_control/mpc_controller/config/ref.txt ");
+	VariablesGrid	ref(4, 5);
+    ref(0,0 ) = 0.00; ref(1,0 ) = 0.0; ref(2,0 ) = 0.0;	ref(3,0 ) = 0.0;
+    ref(0,1 ) = 0.025; ref(1,1 ) = 0.0; ref(2,1 ) = 0.0;	ref(3,1 ) = 0.0;
+    ref(0,2 ) = 0.050; ref(1,2 ) = 0.0; ref(2,2 ) = 0.0;	ref(3,2 ) = 0.0;
+    ref(0,3 ) = 0.075; ref(1,3 ) = 0.0; ref(2,3 ) = 0.0;	ref(3,3 ) = 0.0;
+    ref(0,4 ) = 0.100; ref(1,4 ) = 0.0; ref(2,4 ) = 0.0;	ref(3,4 ) = 0.0;
+
+    StaticReferenceTrajectory zeroReferance (ref);
+
+	Controller controller( alg, zeroReferance );
+
+	DVector y( 4 );
+	y.setZero( );
+	y(0) = 0.01;
+
+	controller.init( 0.0, y );
+	controller.step( 0.0, y );
+
+	std::cout<<"\033[36;1m"<<"Hello"<<"\033[36;0m"<<std::endl;
 
 return 0;
 }
