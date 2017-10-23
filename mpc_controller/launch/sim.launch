@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+
+<launch>
+	<!-- Debug Info -->
+	<arg name="debug" default="false" />
+	<arg unless="$(arg debug)" name="launch_prefix" value="" />
+	<arg     if="$(arg debug)" name="launch_prefix" value="gdb --ex run --args" />	
+	<arg name="robot" default="$(optenv ROBOT !!NO_ROBOT_SET!!)"/>
+	<arg name="robot_env" default="empty"/>	
+	<arg name="enable_gazebo_gui" default="false"/>
+	<arg name="ipa_sim" default="true"/>
+	<arg name="paused" default="false"/>
+	
+	<!-- Simulation -->
+	<include file="$(find cob_bringup_sim)/launch/robot.launch" if="$(arg ipa_sim)">
+		<arg name="robot" value="$(arg robot)"/>
+		<arg name="robot_env" value="$(arg robot_env)"/>
+    	<arg name="gui" value="$(arg enable_gazebo_gui)"/>
+	</include> 	
+		
+</launch>  
