@@ -17,7 +17,6 @@ find_package(orocos_kdl REQUIRED)
 
 find_package(Ceres REQUIRED)
 find_package(ACADO REQUIRED)
-find_package(CASADI REQUIRED)
 
 message("-- Found Ceres version ${CERES_VERSION}: ${CERES_INCLUDE_DIRS}")
 
@@ -32,24 +31,13 @@ catkin_package(
 include_directories(include ${catkin_INCLUDE_DIRS} ${EIGEN_INCLUDE_DIRS} ${orocos_kdl_INCLUDE_DIRS} ${ACADO_INCLUDE_PACKAGES} )
 FIND_LIBRARY(libacado libacado_toolkit_s.so ${ACADO_DIR}/build/lib)
 
+add_executable(kinematics_test test/kinematics_test.cpp src/kinematics.cpp)
 
-add_library(predictive_manipulation
-  src/kinematics.cpp
-)
+add_dependencies(kinematics_test ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-
-## add executable
-add_executable(pd_manipulation_node 
-	src/pd_trajectory_generator_node.cpp
-)
-
-add_dependencies(predictive_manipulation ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(pd_manipulation_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-FIND_LIBRARY(libacado libacado_toolkit_s.so ${ACADO_DIR}/build/lib)
-target_link_libraries(pd_manipulation_node 
+target_link_libraries(kinematics_test  
 	${catkin_LIBRARIES} 
-	${orocos_kdl_LIBRARIES} 
-	${libacado}
-	predictive_manipulation	
+	${orocos_kdl_LIBRARIES}
+	${libacado} 
 )
+
