@@ -94,19 +94,19 @@ namespace nmpc
 		//Eigen::Matrix 				homo_matrix_		;
 
 
-		void forward_kinematics(const std::vector<double>& q , const std::string& chain_base_link = " ", const std::string& chain_tip_link = " ", const std::string& root_frame=" " );
+		void forwardKinematics(const std::vector<double>& q , const std::string& chain_base_link = " ", const std::string& chain_tip_link = " ", const std::string& root_frame=" " );
 
-		void tf_listener_function( geometry_msgs::TransformStamped& transform_msg, const std::string& source_frame=" ", const std::string& target_frame=" " );
+		void homoMatrixAtEachJoint(void);
 
-		void tf_listener_function( geometry_msgs::PoseStamped& poseStamp, const std::string& source_frame=" ", const std::string& target_frame=" " );
 
-		void tf_listener_function( std::vector<double>& angle, const std::string& source_frame, const std::string& target_frame );
 
-		Eigen::Matrix3Xd create_rotation_matrix( const std::vector<double>& angle, const std::vector<uint16_t>& axis);
+		friend std::ostream& operator<<(std::ostream& os, std::vector<std::string>& vec)
+		{
+			for (auto it = vec.begin(); it != vec.end(); ++it)
+				os << *it;
 
-		Eigen::Matrix3Xd create_rotation_matrix( const double& angle, const std::string& axis );
-
-		friend bool operator==(std::vector<uint16_t> vec1, std::vector<uint16_t> vec2);
+			return os;
+		}
 
 	public:
 
@@ -119,7 +119,7 @@ namespace nmpc
 		 * @param chain_tip_link = tip link of kinematic chain called end-effector link
 		 *
 		 */
-		Kinematics(	const std::string rbt_description = "/robot_description", const std::string& chain_base_link="base_link",	const std::string& chain_tip_link="gripper"	);
+		Kinematics(	const std::string& rbt_description = "/robot_description", const std::string& chain_base_link="base_link",	const std::string& chain_tip_link="gripper"	);
 
 
 		/**
@@ -150,7 +150,7 @@ namespace nmpc
 		 */
 		Kinematics(	const KDL::Tree& robot_kdl_tree, const std::string& chain_base_link="base_link", const std::string& chain_tip_link="gripper" );
 
-		~Kinematics();
+		~Kinematics(){};
 
 
 		/**
@@ -239,11 +239,23 @@ namespace nmpc
 		bool isBaseActive();
 
 		/**
+		 * @brief compute forward kinematics
+		 *
+		 */
+		void computeForwardKinematics(void);
+
+
+		/**
 		 * @brief print any type of vector value for debug purpose
 		 *@param vec = template type of vector
 		 */
 		template<class T>
 		void printVector(const T& vec);
+
+		/**
+		 * @brief check code functionality specifically use for bebug purpose
+		 */
+		void debugCodeFunctionality(void);
 
 	};
 
