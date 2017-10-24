@@ -4,6 +4,7 @@
 
 //ROS
 #include <ros/ros.h>
+#include <ros/console.h>
 #include <sensor_msgs/JointState.h>
 #include <geometry_msgs/Twist.h>
 #include <std_msgs/Float64MultiArray.h>
@@ -28,6 +29,13 @@
 #include <acado_optimal_control.hpp>
 #include <acado/bindings/acado_gnuplot/gnuplot_window.hpp>
 
+
+enum
+{
+	EMPTY,
+	SUCCESS,
+	FAILURE
+};
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 /**
@@ -69,22 +77,43 @@ namespace nmpc
 		unsigned int 				dof_				;		// Degree of freedom
 		unsigned int 				nr_segments_		;		// Nr of segments
 		bool 						base_active_		;		// Mobile or stationary manipulator
-//		urdf::Model 				robot_urdf_model_	;		// Urdf model of robot
+		urdf::Model 				robot_urdf_model_	;		// Urdf model of robot
 		KDL::Tree					robot_tree_			;		// Robot tree
 		KDL::Chain 					kinematic_chain_	;		// Kinematic chain of robot
-		std::vector<KDL::Joint> 	joints_name_		;		// Vector of joint names
+		std::vector<KDL::Joint> 	joints_				;		// Vector of joint names
+
 		std::vector<KDL::Frame> 	joints_frame_		;		// Vector of joint frame
-//		std::vector<KDL::Segment>	forward_kinematics_	;		// Number of segments
+		std::vector<std::string> 	joints_name_		;
+		std::vector<std::string> 	joints_type_		;
+
+		//		std::vector<KDL::Segment>	forward_kinematics_	;		// Number of segments
 		std::string 				chain_base_link_	;		// Chain base link
 		std::string 				chain_tip_link_		;		// Chain tip link
+		std::string 				root_frame_			;
 
+		//Eigen::Matrix 				homo_matrix_		;
+
+
+		void forward_kinematics(const std::vector<double>& q , const std::string& chain_base_link = " ", const std::string& chain_tip_link = " ", const std::string& root_frame=" " );
+
+		void tf_listener_function( geometry_msgs::TransformStamped& transform_msg, const std::string& source_frame=" ", const std::string& target_frame=" " );
+
+		void tf_listener_function( geometry_msgs::PoseStamped& poseStamp, const std::string& source_frame=" ", const std::string& target_frame=" " );
+
+		void tf_listener_function( std::vector<double>& angle, const std::string& source_frame, const std::string& target_frame );
+
+		Eigen::Matrix3Xd create_rotation_matrix( const std::vector<double>& angle, const std::vector<uint16_t>& axis);
+
+		Eigen::Matrix3Xd create_rotation_matrix( const double& angle, const std::string& axis );
+
+		friend bool operator==(std::vector<uint16_t> vec1, std::vector<uint16_t> vec2);
 
 	public:
 
 		Kinematics();
 
 		/**
-		 * @brief kinematics chain is defined by only base_link and tip_link
+		 * @brief Get kinematics chain using parameter is defined by only base_link and tip_link
 		 * @param rbt_description = robot description containts urdf of robot
 		 * @param chain_base_link = root link of kinematic chain
 		 * @param chain_tip_link = tip link of kinematic chain called end-effector link
@@ -128,7 +157,13 @@ namespace nmpc
 		 * @brief gives name of joints in kinematic chain (between root link and tip link)
 		 * @return vector of joint name
 		 */
-		std::vector<KDL::Joint> getJntNames();
+		std::vector<std::string> getJntNames();	//std::vector<KDL::Joint>
+
+		/**
+		 * @brief gives type of joints in kinematic chain (between root link and tip link)
+		 * @return vector of joint type
+		 */
+		std::vector<std::string> getJntTypes();
 
 		/**
 		 * @brief gives frame of joints in kinematic chain (between root link and tip link)
@@ -164,7 +199,7 @@ namespace nmpc
 		 * @brief set name of joints in kinematic chain (between root link and tip link)
 		 * @param vector of joint name
 		 */
-		void setJntNames(const std::vector<KDL::Joint>& jntName);
+		void setJntNames(const std::vector<std::string>& jntName);	//std::vector<KDL::Joint>
 
 		/**
 		 * @brief set frame of joints in kinematic chain (between root link and tip link)
