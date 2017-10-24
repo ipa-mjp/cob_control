@@ -75,8 +75,8 @@ namespace nmpc
 		std::vector<KDL::Joint> 	joints_name_		;		// Vector of joint names
 		std::vector<KDL::Frame> 	joints_frame_		;		// Vector of joint frame
 //		std::vector<KDL::Segment>	forward_kinematics_	;		// Number of segments
-		std::string 				chain_base_link		;		// Chain base link
-		std::string 				chain_tip_link		;		// Chain tip link
+		std::string 				chain_base_link_	;		// Chain base link
+		std::string 				chain_tip_link_		;		// Chain tip link
 
 
 	public:
@@ -159,6 +159,43 @@ namespace nmpc
 		 * @return integer value of number of segments
 		 */
 		unsigned int getNrOfSegments();
+
+		/**
+		 * @brief set name of joints in kinematic chain (between root link and tip link)
+		 * @param vector of joint name
+		 */
+		void setJntNames(const std::vector<KDL::Joint>& jntName);
+
+		/**
+		 * @brief set frame of joints in kinematic chain (between root link and tip link)
+		 * @param vector of joint frames
+		 */
+		void setJntFrames(const std::vector<KDL::Frame>& jntFrame);
+
+		/**
+		 * @brief set name of base(root) link in kinematic chain
+		 * @param string object of name of base link
+		 */
+		void setRootlinkName(const std::string& base_link);
+
+		/**
+		 * @brief set name of of tip(end-effector) link in kinematic chain
+		 * @param string object of name of tip link
+		 */
+		void setTiplinkName(const std::string& tip_link);
+
+		/**
+		 * @brief set number of joints in kinematic chain (between root link and tip link) or degree of freedom
+		 * @param integer value of dof
+		 */
+		void setDOF(const unsigned int& dof);
+
+		/**
+		 * @brief set number of joints in kinematic chain (between root link and tip link) or degree of freedom
+		 * @param integer value of number of segments
+		 */
+		void setNrOfSegments(const unsigned int& nr_segment);
+
 
 		/**
 		 * @brief gives info about base is active(mobile robot) or not(stationary platform)
