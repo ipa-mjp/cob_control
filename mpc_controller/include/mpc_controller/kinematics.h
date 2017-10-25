@@ -81,32 +81,35 @@ namespace nmpc
 		ros::NodeHandle node_handler_;
 
 		//KDL data member functions
-		unsigned int 				dof_				;		// Degree of freedom
-		unsigned int 				nr_segments_		;		// Nr of segments
-		bool 						base_active_		;		// Mobile or stationary manipulator
-		urdf::Model 				robot_urdf_model_	;		// Urdf model of robot
-		KDL::Tree					robot_tree_			;		// Robot tree
-		KDL::Chain 					kinematic_chain_	;		// Kinematic chain of robot
-		std::vector<KDL::Joint> 	joints_				;		// Vector of joints
+		unsigned int 				dof_					;		// Degree of freedom
+		unsigned int 				nr_segments_			;		// Nr of segments
+		bool 						base_active_			;		// Mobile or stationary manipulator
+		urdf::Model 				robot_urdf_model_		;		// Urdf model of robot
+		KDL::Tree					robot_tree_				;		// Robot tree
+		KDL::Chain 					kinematic_chain_		;		// Kinematic chain of robot
+		std::vector<KDL::Joint> 	joints_					;		// Vector of joints
 
-		std::vector<KDL::Frame> 	joints_frame_		;		// Vector of joint frame
-		std::vector<std::string> 	joints_name_		;		// vector of joint names in chain
-		std::vector<std::string> 	joints_type_		;		// vector of joint type in chain
-		std::vector<std::vector<uint16_t> >		joint_axis_			;		// if revolute than which axis
+		std::vector<KDL::Frame> 	joints_frame_			;		// Vector of joint frame
+		std::vector<std::string> 	joints_name_			;		// vector of joint names in chain
+		std::vector<std::string> 	joints_type_			;		// vector of joint type in chain
+		std::vector<std::vector<uint16_t> >		joint_axis_	;		// if revolute than which axis
+		std::vector<uint16_t> 		joints_mass_			;		// mass of each joint
 
-		//		std::vector<KDL::Segment>	forward_kinematics_	;		// Number of segments
-		std::string 				chain_base_link_	;		// Chain base link
-		std::string 				chain_tip_link_		;		// Chain tip link
-		std::string 				root_frame_			;
+
+		std::vector<KDL::Segment>	kdl_segments_			;		// Number of segments kind of store fk in list
+		std::string 				chain_base_link_		;		// Chain base link
+		std::string 				chain_tip_link_			;		// Chain tip link
+		std::string 				root_frame_				;
 
 		//Eigen::Matrix 				homo_matrix_		;
 
 
-		void forwardKinematics(const std::vector<double>& q , const std::string& chain_base_link = " ", const std::string& chain_tip_link = " ", const std::string& root_frame=" "  );
+		void forwardKinematics(const std::vector<double>& jntAngle);
 
-		void homoMatrixAtEachJoint(void);
+		//void createRotationMatrixFromAngle(const double& angle, const uint16_t& nr_seg,  Eigen::Matrix4Xd& rot_mat);
+		//void createRotationMatrixFromAngle(const double& angle, const uint16_t& nr_seg,  KDL::Frame& rot_mat);
 
-		void createRotationMatrix(const uint16_t& nr_seg);
+		//void convertKDLtoEigenMatrix(const KDL::Frame& kdl_mat, Eigen::Matrix4Xd& eig_mat);
 
 		friend std::ostream& operator<<(std::ostream& os, std::vector<std::string>& vec)
 		{
