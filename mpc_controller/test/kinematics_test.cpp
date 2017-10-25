@@ -11,9 +11,9 @@ int main(int argc, char **argv)
 
 	if (node_handler.hasParam("/robot_description"))
 	{
-		Kinematics kinematics("/robot_description","arm_base_link","arm_wrist_3_link");
+		//Kinematics kinematics("/robot_description","arm_base_link","arm_wrist_3_link");
 		//std::cout<<"\033[36;1m"<< rbt_des <<"\033[36;0m"<<std::endl;
-		kinematics.debugCodeFunctionality();
+		//kinematics.debugCodeFunctionality();
 	}
 
 
