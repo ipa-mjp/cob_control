@@ -33,11 +33,16 @@ Kinematics::Kinematics(const std::string& rbt_description, const std::string& ch
 
     this->joint_axis_.resize(this->nr_segments_);
 
+
+	std::vector<KDL::Frame> last_frame;
     for (unsigned int i = 0; i < this->nr_segments_; ++i)
     {
     	this->joints_.push_back( this->kinematic_chain_.getSegment(i).getJoint());
 
     	this->joints_name_.push_back( this->joints_.at(i).getName());
+
+    	this->joints_type_.push_back(this->joints_.at(i).getTypeName());
+
 
     	if (this->joints_.at(i).getType() == revolute)
     		this->joints_type_.push_back ( "revolute" );
@@ -56,7 +61,7 @@ Kinematics::Kinematics(const std::string& rbt_description, const std::string& ch
     	this->joints_mass_.push_back( this->kinematic_chain_.getSegment(i).getInertia().getMass() );
 
     	//segments
-    	std::vector<KDL::Frame> last_frame;
+
 		if (last_frame.empty())
 		{
 			last_frame.push_back( this->kinematic_chain_.getSegment(i).getFrameToTip() );
@@ -66,14 +71,14 @@ Kinematics::Kinematics(const std::string& rbt_description, const std::string& ch
 			last_frame.push_back( last_frame.at(i-1) * this->kinematic_chain_.getSegment(i).getFrameToTip());
 		}
 
-		if (this->joints_type_.at(i) == "fixed")
+		if (this->joints_.at(i).getType() == 8)//(this->joints_type_.at(i) == "fixed")
 		{
 			KDL::Segment link( this->kinematic_chain_.getSegment(i).getName(), KDL::Joint(KDL::Joint::None), last_frame.at(i), KDL::RigidBodyInertia::Zero());
 			this->kdl_segments_.push_back(link);
 		}
 
 		//todo consider all axis
-		else if (this->joints_type_.at(i) == "revolute")
+		else if (this->joints_.at(i).getType() == 0)//(this->joints_type_.at(i) == "revolute")
 		{
 			KDL::Segment link( this->kinematic_chain_.getSegment(i).getName(), KDL::Joint(KDL::Joint::RotZ), last_frame.at(i), KDL::RigidBodyInertia::Zero());
 			this->kdl_segments_.push_back(link);
@@ -130,7 +135,7 @@ void Kinematics::debugCodeFunctionality(void)
 	}
 
 	std::cout<<"\033[92m"<<"###########  homogenous matrix ######### "<<"\033[0m"<<std::endl;
-	//this->forwardKinematics();
+	this->computeForwardKinematics();
 
 	std::cout<<"\033[92m"<<"###########  Check set functionality ######### "<<"\033[0m"<<std::endl;
 	std::string str;
@@ -313,13 +318,47 @@ void Kinematics::printVector(const T& vec)
 		std::cout<<"\033[36;1m"<<*it<<"\033[36;0m"<<std::endl;
 }
 
-/*
+
 void Kinematics::forwardKinematics(const std::vector<double>& jntAngle)
 {
+
+
+	std::cout<<"\033[42;1m"	<<"joint frame size: "<<this->joints_frame_.size()<<"\033[42;0m"<<std::endl;
+
 	for (uint16_t i = 0; i < this->nr_segments_; i++)
 	{
+		KDL::Frame rot_mat = KDL::Frame::Identity();
+		double angle = 1.57;
+		//this->createRotationMatrixFromAngle(1.57, i, rot_mat);	//rotation about z axis
+		rot_mat.M(0,0) = this->joints_frame_.at(i).M(0,0) * cos(angle) + this->joints_frame_.at(i).M(0,1) * sin(angle);
+		rot_mat.M(0,1) = -this->joints_frame_.at(i).M(0,0) * sin(angle) + this->joints_frame_.at(i).M(0,1) * cos(angle);
+		rot_mat.M(0,2) = this->joints_frame_.at(i).M(0,2);
 
+		rot_mat.M(1,0) = this->joints_frame_.at(i).M(1,0) * cos(angle) + this->joints_frame_.at(i).M(1,1) * sin(angle);
+		rot_mat.M(1,1) = -this->joints_frame_.at(i).M(1,0) * sin(angle) + this->joints_frame_.at(i).M(1,1) * cos(angle);
+		rot_mat.M(1,2) = this->joints_frame_.at(i).M(1,2);
 
+		rot_mat.M(2,0) = this->joints_frame_.at(i).M(2,0) * cos(angle) + this->joints_frame_.at(i).M(2,1) * sin(angle);
+		rot_mat.M(2,1) = -this->joints_frame_.at(i).M(2,0) * sin(angle) + this->joints_frame_.at(i).M(2,1) * cos(angle);
+		rot_mat.M(2,2) = this->joints_frame_.at(i).M(2,2);
+
+		rot_mat.p.x(this->joints_frame_.at(i).p.x());
+		rot_mat.p.y(this->joints_frame_.at(i).p.y());
+		rot_mat.p.z(this->joints_frame_.at(i).p.z());
+
+		std::cout<<"\033[05;1m"<<"Joints frames: "	<<"\033[05;0m"<<std::endl;
+		for (std::vector<KDL::Frame>::const_iterator it = this->joints_frame_.begin(); it!= joints_frame_.end(); ++it)
+		{
+			KDL::Rotation rot_mat = it->M;
+			KDL::Vector pos_mat = it->p;
+
+			//for (unsigned int i = 0; i < it->)
+			std::cout<<"\033[20;1m"	<<" joint axis: "	<<	" rxx "<< rot_mat(0,0) <<	" rxy "<< rot_mat(0,1) <<	" rxz "<< rot_mat(0,2)
+														<<	" ryx "<< rot_mat(1,0) <<	" ryy "<< rot_mat(1,1) <<	" ryz "<< rot_mat(1,2)
+														<<	" rzx "<< rot_mat(2,0) <<	" rzy "<< rot_mat(2,1) <<	" rzz "<< rot_mat(2,2)
+														<<	" px "<< pos_mat.x() <<	" py "<< pos_mat.y() <<	" pz "<< pos_mat.z()
+					<<"\033[20;0m"<<std::endl;
+		}
 
 
 	}
@@ -328,7 +367,7 @@ void Kinematics::forwardKinematics(const std::vector<double>& jntAngle)
 
 
 
-}*/
+}
 
 /*
 void Kinematics::convertKDLtoEigenMatrix(const KDL::Frame& kdl_mat, Eigen::Matrix4Xd& eig_mat)
@@ -369,7 +408,7 @@ void Kinematics::createRotationMatrixFromAngle(const double& angle, const uint16
 	}
 
 }
-
+*/
 //be careful angle should be
 void Kinematics::createRotationMatrixFromAngle(const double& angle, const uint16_t& nr_seg, KDL::Frame& rot_mat)
 {
@@ -379,8 +418,8 @@ void Kinematics::createRotationMatrixFromAngle(const double& angle, const uint16
 	{
 		std::cout<<"\033[36;1m"<<"rotation about x-axis"<<"\033[36;0m"<<std::endl;
 
-		rot_mat(1,1) = cos(angle);	rot_mat(1,2) = (-1)*sin(angle);
-		rot_mat(2,1) = sin(angle);	rot_mat(2,2) = 		cos(angle);
+		rot_mat.M(1,1) = cos(angle);		rot_mat.M(1,2) = (-1)*sin(angle);
+		rot_mat.M(2,1) = sin(angle);		rot_mat.M(2,2) = 	  cos(angle);
 
 	}
 
@@ -388,23 +427,24 @@ void Kinematics::createRotationMatrixFromAngle(const double& angle, const uint16
 	{
 		std::cout<<"\033[36;1m"<<"rotation about y-axis"<<"\033[36;0m"<<std::endl;
 
-		rot_mat(0,0) = cos(angle);		rot_mat(0,2) = 		sin(angle);
-		rot_mat(2,0) = (-1)*sin(angle);	rot_mat(2,2) = 		cos(angle);
+		rot_mat.M(0,0) = cos(angle);		rot_mat.M(0,2) = 	sin(angle);
+		rot_mat.M(2,0) = (-1)*sin(angle);	rot_mat.M(2,2) = 	cos(angle);
 
 	}
 	else if (this->joint_axis_.at(nr_seg) == std::vector<uint16_t>{ 0,0,1})
 	{
 		std::cout<<"\033[36;1m"<<"rotation about z-axis"<<"\033[36;0m"<<std::endl;
 
-		rot_mat(0,0) = cos(angle);	rot_mat(0,1) = (-1)*sin(angle);
-		rot_mat(1,0) = sin(angle);	rot_mat(1,1) = 		cos(angle);
+		rot_mat.M(0,0) = cos(angle);	rot_mat.M(0,1) = (-1)*sin(angle);
+		rot_mat.M(1,0) = sin(angle);	rot_mat.M(1,1) = 		cos(angle);
 	}
 
 }
-*/
+
 
 void Kinematics::computeForwardKinematics()
 {
-;
+	std::vector<double> jntAngle {0.0, 0.0, 0.0, 0.0, 0.0 ,0.0};
+	this->forwardKinematics(jntAngle);
 }
 

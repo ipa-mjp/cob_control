@@ -107,7 +107,7 @@ namespace nmpc
 		void forwardKinematics(const std::vector<double>& jntAngle);
 
 		//void createRotationMatrixFromAngle(const double& angle, const uint16_t& nr_seg,  Eigen::Matrix4Xd& rot_mat);
-		//void createRotationMatrixFromAngle(const double& angle, const uint16_t& nr_seg,  KDL::Frame& rot_mat);
+		void createRotationMatrixFromAngle(const double& angle, const uint16_t& nr_seg,  KDL::Frame& rot_mat);
 
 		//void convertKDLtoEigenMatrix(const KDL::Frame& kdl_mat, Eigen::Matrix4Xd& eig_mat);
 
