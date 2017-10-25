@@ -41,10 +41,21 @@ namespace nmpc
 	{
 	private:
 
-		std::string jnt_base_link;
-		std::string jnt_tip_link;
+		std::string chain_base_link;
+		std::string chain_tip_link;
 		std::string root_frame;
+		unsigned int segments;
+		unsigned int dof;
+		std::vector<std::string> jnt_type;
+		std::vector<std::vector<uint16_t> > jnt_axis;
 
+		KDL::Chain	kinematic_chain;
+		std::vector<KDL::Frame>	frames;	//homo matrix of each frame with prevoius joint
+		std::vector<KDL::Joint>	jnts;
+
+	public:
+
+		Kinematics(const std::string rbt_description = "/robot_description", const std::string& chain_base_link="base_link", const std::string& chain_tip_link="gripper", const std::string& root_frame="world");
 
 
 	};
