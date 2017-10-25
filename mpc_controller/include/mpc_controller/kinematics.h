@@ -33,6 +33,7 @@
 /**
  * @brief class for computing forward kinematics and inverse kinematics
  */
+#define _DEBUG_  true
 
 namespace nmpc
 {
@@ -40,7 +41,7 @@ namespace nmpc
 	class Kinematics
 	{
 	private:
-
+		ros::NodeHandle node_handle;
 		std::string chain_base_link;
 		std::string chain_tip_link;
 		std::string root_frame;
@@ -53,10 +54,14 @@ namespace nmpc
 		std::vector<KDL::Frame>	frames;	//homo matrix of each frame with prevoius joint
 		std::vector<KDL::Joint>	jnts;
 
+		std::vector<KDL::Frame> fk_mat;	//ff_mat
+
+		//bool _DEBUG_;
+		void printDataMemebers(void);
+
 	public:
 
 		Kinematics(const std::string rbt_description = "/robot_description", const std::string& chain_base_link="base_link", const std::string& chain_tip_link="gripper", const std::string& root_frame="world");
-
 
 	};
 
