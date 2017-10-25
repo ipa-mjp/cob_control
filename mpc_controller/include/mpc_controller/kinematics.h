@@ -22,6 +22,7 @@
 //C++
 #include <iostream>
 #include <map>
+#include <string>
 
 //ACADO
 #include <acado_toolkit.hpp>
@@ -37,6 +38,12 @@ enum
 	FAILURE
 };
 
+//todo add for prismatic joint
+enum jntType
+{
+	revolute = 0,
+	fixed = 8
+};
 //------------------------------------------------------------------------------------------------------------------------------------------
 /**
  * @brief describe robot model using KDL kinematics
@@ -80,11 +87,12 @@ namespace nmpc
 		urdf::Model 				robot_urdf_model_	;		// Urdf model of robot
 		KDL::Tree					robot_tree_			;		// Robot tree
 		KDL::Chain 					kinematic_chain_	;		// Kinematic chain of robot
-		std::vector<KDL::Joint> 	joints_				;		// Vector of joint names
+		std::vector<KDL::Joint> 	joints_				;		// Vector of joints
 
 		std::vector<KDL::Frame> 	joints_frame_		;		// Vector of joint frame
-		std::vector<std::string> 	joints_name_		;
-		std::vector<std::string> 	joints_type_		;
+		std::vector<std::string> 	joints_name_		;		// vector of joint names in chain
+		std::vector<std::string> 	joints_type_		;		// vector of joint type in chain
+		std::vector<std::vector<uint16_t> >		joint_axis_			;		// if revolute than which axis
 
 		//		std::vector<KDL::Segment>	forward_kinematics_	;		// Number of segments
 		std::string 				chain_base_link_	;		// Chain base link
@@ -94,11 +102,11 @@ namespace nmpc
 		//Eigen::Matrix 				homo_matrix_		;
 
 
-		void forwardKinematics(const std::vector<double>& q , const std::string& chain_base_link = " ", const std::string& chain_tip_link = " ", const std::string& root_frame=" " );
+		void forwardKinematics(const std::vector<double>& q , const std::string& chain_base_link = " ", const std::string& chain_tip_link = " ", const std::string& root_frame=" "  );
 
 		void homoMatrixAtEachJoint(void);
 
-
+		void createRotationMatrix(const uint16_t& nr_seg);
 
 		friend std::ostream& operator<<(std::ostream& os, std::vector<std::string>& vec)
 		{
@@ -106,6 +114,16 @@ namespace nmpc
 				os << *it;
 
 			return os;
+		}
+
+		friend bool operator==(std::vector<uint16_t>& vec1, std::vector<uint16_t>& vec2)
+		{
+			for (uint16_t i = 0; i < vec1.size(); ++i)
+			{
+				if (vec1[i] != vec2[i])
+					return false;
+			}
+			return true;
 		}
 
 	public:
@@ -119,7 +137,7 @@ namespace nmpc
 		 * @param chain_tip_link = tip link of kinematic chain called end-effector link
 		 *
 		 */
-		Kinematics(	const std::string& rbt_description = "/robot_description", const std::string& chain_base_link="base_link",	const std::string& chain_tip_link="gripper"	);
+		Kinematics(	const std::string& rbt_description = "/robot_description", const std::string& chain_base_link="base_link",	const std::string& chain_tip_link="gripper", const std::string& root_frame="world"	);
 
 
 		/**

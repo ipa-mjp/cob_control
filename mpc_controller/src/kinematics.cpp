@@ -5,11 +5,12 @@ using namespace nmpc;
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-Kinematics::Kinematics(const std::string& rbt_description, const std::string& chain_base_link, const std::string& chain_tip_link )
+Kinematics::Kinematics(const std::string& rbt_description, const std::string& chain_base_link, const std::string& chain_tip_link, const std::string& root_frame )
 {
 
 	this->chain_base_link_ = chain_base_link	;
 	this->chain_tip_link_  = chain_tip_link 	;
+	this->root_frame_ 	   = root_frame			;
 
 	//tree from parameter server
     if (!kdl_parser::treeFromParam("/robot_description", this->robot_tree_))
@@ -30,6 +31,7 @@ Kinematics::Kinematics(const std::string& rbt_description, const std::string& ch
 
     this->nr_segments_ = this->kinematic_chain_.getNrOfSegments();
 
+    this->joint_axis_.resize(this->nr_segments_);
 
     for (unsigned int i = 0; i < this->nr_segments_; ++i)
     {
@@ -37,7 +39,16 @@ Kinematics::Kinematics(const std::string& rbt_description, const std::string& ch
 
     	this->joints_name_.push_back( this->joints_.at(i).getName());
 
-    	this->joints_type_.push_back( this->joints_.at(i).getTypeName());
+    	if (this->joints_.at(i).getType() == revolute)
+    		this->joints_type_.push_back ( "revolute" );
+
+    	else if (this->joints_.at(i).getType() == fixed)
+    		this->joints_type_.push_back ( "fixed" );
+
+    	//for every segment joint axis store in vector
+    	this->joint_axis_[i].push_back( this->joints_.at(i).JointAxis().x());
+    	this->joint_axis_[i].push_back( this->joints_.at(i).JointAxis().y());
+    	this->joint_axis_[i].push_back( this->joints_.at(i).JointAxis().z());
 
     }
 }
@@ -290,11 +301,35 @@ void Kinematics::homoMatrixAtEachJoint()
 
 		kdl_frame = this->kinematic_chain_.getSegment(i).getFrameToTip();
 
-		kdl_frame.M.GetRPY(roll, pitch, yaw);
 
-		std::cout<<"\033[36;1m"<<"px: "<<kdl_frame.p.x()<<"  py: "<<kdl_frame.p.y()<<"  pz: "<<kdl_frame.p.z()<<"\033[36;0m"<<std::endl;
-		std::cout<<"\033[36;1m"<<"roll: "<<roll<<"  pitch: "<<pitch<<"  yaw: "<<yaw<<"\033[36;0m"<<std::endl;
 
+
+		//std::cout<<"\033[36;1m"<<"px: "<<kdl_frame.p.x()<<"  py: "<<kdl_frame.p.y()<<"  pz: "<<kdl_frame.p.z()<<"\033[36;0m"<<std::endl;
+		//std::cout<<"\033[36;1m"<<"roll: "<<roll<<"  pitch: "<<pitch<<"  yaw: "<<yaw<<"\033[36;0m"<<std::endl;
+
+	}
+
+}
+
+void Kinematics::createRotationMatrix(const uint16_t& nr_seg)
+{
+	if (this->joint_axis_.at(nr_seg) == std::vector<uint16_t>{ 1,0,0} && this->joints_type_.at(nr_seg) == "revolute")
+	{
+		std::cout<<"\033[36;1m"<<"rotation about x-axis"<<"\033[36;0m"<<std::endl;
+
+
+	}
+	else if (this->joint_axis_.at(nr_seg) == std::vector<uint16_t>{ 0,1,0} && this->joints_type_.at(nr_seg) == "revolute")
+	{
+		std::cout<<"\033[36;1m"<<"rotation about y-axis"<<"\033[36;0m"<<std::endl;
+	}
+	else if (this->joint_axis_.at(nr_seg) == std::vector<uint16_t>{ 0,0,1} && this->joints_type_.at(nr_seg) == "revolute")
+	{
+		std::cout<<"\033[36;1m"<<"rotation about z-axis"<<"\033[36;0m"<<std::endl;
+	}
+	else
+	{
+		std::cout<<"\033[36;1m"<<"fixed"<<"\033[36;0m"<<std::endl;
 	}
 
 }
