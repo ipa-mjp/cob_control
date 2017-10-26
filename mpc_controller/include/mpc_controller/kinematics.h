@@ -48,20 +48,28 @@ namespace nmpc
 		unsigned int segments;
 		unsigned int dof;
 		std::vector<std::string> jnt_type;
-		std::vector<std::vector<uint16_t> > jnt_axis;
+		//std::vector<std::vector<uint16_t> > jnt_axis;
+		std::vector<KDL::Vector> jnt_rot_axis;
+		std::vector<std::vector<double> > jnt_rot_angle;
+
 
 		KDL::Chain	kinematic_chain;
-		std::vector<KDL::Frame>	frames;	//homo matrix of each frame with prevoius joint
+		std::vector<KDL::Frame>	frames;
 		std::vector<KDL::Joint>	jnts;
+		std::vector<KDL::Frame>	jnt_homo_mat;	//homo matrix of each frame with prevoius joint
 
 		std::vector<KDL::Frame> fk_mat;	//ff_mat
 
 		//bool _DEBUG_;
 		void printDataMemebers(void);
 
+		void createRoatationMatrix(const uint16_t& seg_nr);
+
 	public:
 
 		Kinematics(const std::string rbt_description = "/robot_description", const std::string& chain_base_link="base_link", const std::string& chain_tip_link="gripper", const std::string& root_frame="world");
+
+		void forwardKinematics(const std::vector<double>& jnt_angles);
 
 	};
 
