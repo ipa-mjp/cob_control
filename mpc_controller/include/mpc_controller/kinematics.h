@@ -63,7 +63,8 @@ namespace nmpc
 		//bool _DEBUG_;
 		void printDataMemebers(void);
 
-		void createRoatationMatrix(const uint16_t& seg_nr);
+		void createHomoRoatationMatrix(const uint16_t& seg_nr);
+		void createRoatationMatrix(const double& angle, const std::vector<unsigned int>& rot_axis, KDL::Frame& lcl_homo_mat);
 
 	public:
 

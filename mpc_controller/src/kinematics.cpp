@@ -9,6 +9,7 @@ Kinematics::Kinematics(const std::string rbt_description , const std::string& ch
 	this->chain_base_link = chain_base_link;
 	this->chain_tip_link = chain_tip_link;
 	this->root_frame = root_frame;
+	this->dof = 0;
 
 	//tree from parameter server
 	KDL::Tree kdl_tree;
@@ -62,7 +63,10 @@ Kinematics::Kinematics(const std::string rbt_description , const std::string& ch
     	this->jnt_homo_mat.push_back(this->frames.at(i));
 
     	if (this->jnts.at(i).getType() == 0)	//revolute joint	//todo consider test for presmatic joint
-    		this->createRoatationMatrix(i);
+    	{
+    		this->createHomoRoatationMatrix( i );
+    		this->dof++;						// consider revoulte joint as dof
+    	}
 
 
     	if (_DEBUG_)
@@ -85,14 +89,15 @@ Kinematics::Kinematics(const std::string rbt_description , const std::string& ch
     if (_DEBUG_)
     {
     	//this->printDataMemebers();
-    	std::cout<<"\033[20m"<<"###########  fk correctness ######### "	<<"\033[0m"<<std::endl;
+    	//std::cout<<"\033[20m"<<"###########  fk correctness ######### "	<<"\033[0m"<<std::endl;
 		std::vector<double> jnt_angels;
-		jnt_angels.resize( 6, 0.0 );
+		jnt_angels.resize( this->dof, 0.0 );
+		jnt_angels[0] = 1.57;
 		this->forwardKinematics(jnt_angels);
     }
 }
 
-void Kinematics::createRoatationMatrix(const uint16_t& seg_nr)
+void Kinematics::createHomoRoatationMatrix(const uint16_t& seg_nr)
 {
 
 	//x-axis rotation
@@ -132,9 +137,47 @@ void Kinematics::createRoatationMatrix(const uint16_t& seg_nr)
 		if (_DEBUG_)
 			std::cout<<"rot about z-axis with angel: "<< angle<<std::endl;
 
-		this->jnt_homo_mat.at(seg_nr).M(0,0) = cos(angle);	this->jnt_homo_mat.at(seg_nr).M(0,1) = sin(angle);	this->jnt_homo_mat.at(seg_nr).M(0,2) = 0;
+		this->jnt_homo_mat.at(seg_nr).M(0,0) = cos(angle);	this->jnt_homo_mat.at(seg_nr).M(0,1) = -1*sin(angle);	this->jnt_homo_mat.at(seg_nr).M(0,2) = 0;
 		this->jnt_homo_mat.at(seg_nr).M(1,0) = sin(angle);	this->jnt_homo_mat.at(seg_nr).M(1,1) = cos(angle);	this->jnt_homo_mat.at(seg_nr).M(1,2) = 0;
 		this->jnt_homo_mat.at(seg_nr).M(2,0) = 0;			this->jnt_homo_mat.at(seg_nr).M(2,1) = 0;			this->jnt_homo_mat.at(seg_nr).M(2,2) = 1;
+	}
+}
+
+void Kinematics::createRoatationMatrix(const double& angle, const std::vector<unsigned int>& rot_axis, KDL::Frame& lcl_homo_mat)
+{
+
+	//x-axis rotation
+	if ( (rot_axis[0] == 1 || rot_axis[0] == -1) && rot_axis[1] == 0 && rot_axis[2] == 0 )
+	{
+
+		if (_DEBUG_)
+			std::cout<<"rot about x-axis with angel: "<< angle<<std::endl;
+
+		lcl_homo_mat.M(0,0) = 1;	lcl_homo_mat.M(0,1) = 0;			lcl_homo_mat.M(0,2) = 0;
+		lcl_homo_mat.M(1,0) = 0;	lcl_homo_mat.M(1,1) = cos(angle);	lcl_homo_mat.M(1,2) = -1*sin(angle);
+		lcl_homo_mat.M(2,0) = 0;	lcl_homo_mat.M(2,1) = sin(angle);	lcl_homo_mat.M(2,2) = cos(angle);
+
+	}
+
+	if ( rot_axis[0] == 0 && (rot_axis[1] == 1 || rot_axis[1] == -1) && rot_axis[2] == 0 )
+	{
+
+		if (_DEBUG_)
+			std::cout<<"rot about y-axis with angel: "<< angle<<std::endl;
+
+		lcl_homo_mat.M(0,0) = cos(angle);		lcl_homo_mat.M(0,1) = 0;			lcl_homo_mat.M(0,2) = sin(angle);
+		lcl_homo_mat.M(1,0) = 0;				lcl_homo_mat.M(1,1) = 1;			lcl_homo_mat.M(1,2) = 0;
+		lcl_homo_mat.M(2,0) = -1*sin(angle);	lcl_homo_mat.M(2,1) = 0;			lcl_homo_mat.M(2,2) = cos(angle);
+	}
+
+	if ( rot_axis[0] == 0 && rot_axis[1] == 0 && (rot_axis[2] == 1 || rot_axis[2] == -1) )
+	{
+		if (_DEBUG_)
+			std::cout<<"rot about z-axis with angel: "<< angle<<std::endl;
+
+		lcl_homo_mat.M(0,0) = cos(angle);	lcl_homo_mat.M(0,1) = -1*sin(angle);	lcl_homo_mat.M(0,2) = 0;
+		lcl_homo_mat.M(1,0) = sin(angle);	lcl_homo_mat.M(1,1) = cos(angle);	lcl_homo_mat.M(1,2) = 0;
+		lcl_homo_mat.M(2,0) = 0;			lcl_homo_mat.M(2,1) = 0;			lcl_homo_mat.M(2,2) = 1;
 	}
 }
 
@@ -191,9 +234,61 @@ void Kinematics::printDataMemebers(void)
 void Kinematics::forwardKinematics(const std::vector<double>& jnt_angels)
 {
 	KDL::Frame fk_mat = KDL::Frame::Identity();
+	std::vector<unsigned int> rot_axis{0,0,1};
+	unsigned int cnt = 0;
+
+
+	if (this->root_frame != this->chain_base_link)
+	{
+		tf::TransformListener listener;
+
+	}
 
 	for (uint16_t i = 0; i < this->segments; ++i)
 	{
+		//if revolute joint than multiply with joint angles
+		if (this->jnts.at(i).getType() == 0)
+		{
+
+			KDL::Frame lcl_homo_mat = KDL::Frame::Identity();
+			this->createRoatationMatrix( jnt_angels.at(cnt), rot_axis, lcl_homo_mat );
+			this->jnt_homo_mat[i] =	this->jnt_homo_mat[i] * lcl_homo_mat;
+			cnt++;
+
+			/*
+	    	if (_DEBUG_)
+	    	{
+				std::cout<<"\033[36;1m"<<"lcl homo matrix of " << this->jnts.at(i).getName() <<"\033[36;0m"<<std::endl;
+				KDL::Rotation rot_mat = lcl_homo_mat.M;
+				KDL::Vector pos_mat = lcl_homo_mat.p;
+
+					//for (unsigned int i = 0; i < it->)
+					std::cout<<"\033[32;1m"	<<	" rxx "<< rot_mat(0,0) <<	" rxy "<< rot_mat(0,1) <<	" rxz "<< rot_mat(0,2)	<< "\n"
+																<<	" ryx "<< rot_mat(1,0) <<	" ryy "<< rot_mat(1,1) <<	" ryz "<< rot_mat(1,2)	<< "\n"
+																<<	" rzx "<< rot_mat(2,0) <<	" rzy "<< rot_mat(2,1) <<	" rzz "<< rot_mat(2,2)	<< "\n"
+																<<	" px "<< pos_mat.x() <<	" py "<< pos_mat.y() <<	" pz "<< pos_mat.z()
+							<<"\033[32;0m"<<std::endl;
+	    	}
+
+
+
+	    	if (_DEBUG_)
+	    	{
+				std::cout<<"\033[36;1m"<<"New homo matrix of " << this->jnts.at(i).getName() <<"\033[36;0m"<<std::endl;
+				KDL::Rotation rot_mat = this->jnt_homo_mat.at(i).M;
+				KDL::Vector pos_mat = this->jnt_homo_mat.at(i).p;
+
+					//for (unsigned int i = 0; i < it->)
+					std::cout<<"\033[32;1m"	<<	" rxx "<< rot_mat(0,0) <<	" rxy "<< rot_mat(0,1) <<	" rxz "<< rot_mat(0,2)	<< "\n"
+																<<	" ryx "<< rot_mat(1,0) <<	" ryy "<< rot_mat(1,1) <<	" ryz "<< rot_mat(1,2)	<< "\n"
+																<<	" rzx "<< rot_mat(2,0) <<	" rzy "<< rot_mat(2,1) <<	" rzz "<< rot_mat(2,2)	<< "\n"
+																<<	" px "<< pos_mat.x() <<	" py "<< pos_mat.y() <<	" pz "<< pos_mat.z()
+							<<"\033[32;0m"<<std::endl;
+	    	}
+
+			*/
+
+		}
 
 		fk_mat = fk_mat * this->jnt_homo_mat[i];
 
@@ -212,7 +307,7 @@ void Kinematics::forwardKinematics(const std::vector<double>& jnt_angels)
 						<<"\033[32;0m"<<std::endl;
     	}
 
-
 	}
 }
+
 
