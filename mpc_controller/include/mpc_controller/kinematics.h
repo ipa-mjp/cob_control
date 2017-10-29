@@ -11,6 +11,8 @@
 #include <nav_msgs/Odometry.h>
 #include <tf/tf.h>
 #include <tf/transform_listener.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <tf2_kdl/tf2_kdl.h>
 
 //KDL kinematics
 #include <urdf/model.h>
@@ -18,6 +20,7 @@
 #include <kdl/jntarray.hpp>
 #include <kdl/jntarrayvel.hpp>
 #include <kdl/frames.hpp>
+#include <kdl_conversions/kdl_msg.h>
 
 //C++
 #include <iostream>

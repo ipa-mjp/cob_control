@@ -92,7 +92,7 @@ Kinematics::Kinematics(const std::string rbt_description , const std::string& ch
     	//std::cout<<"\033[20m"<<"###########  fk correctness ######### "	<<"\033[0m"<<std::endl;
 		std::vector<double> jnt_angels;
 		jnt_angels.resize( this->dof, 0.0 );
-		jnt_angels[0] = 1.57;
+		//jnt_angels[0] = 1.57;
 		this->forwardKinematics(jnt_angels);
     }
 }
@@ -237,13 +237,30 @@ void Kinematics::forwardKinematics(const std::vector<double>& jnt_angels)
 	std::vector<unsigned int> rot_axis{0,0,1};
 	unsigned int cnt = 0;
 
-
+	//find transformation between chain_base_link & root frame if different
 	if (this->root_frame != this->chain_base_link)
 	{
 		tf::TransformListener listener;
+		tf::StampedTransform transform;
+		try
+		{	//world arm_1_link
+			listener.waitForTransform(this->root_frame,this->chain_base_link, ros::Time(0), ros::Duration(5.0));	//link2,3 = 3.0,link4,5 = 4.0, link6,7 = 5.0
+			listener.lookupTransform(this->root_frame, this->chain_base_link, ros::Time(0), transform);
+
+			geometry_msgs::TransformStamped msg;
+			tf::transformStampedTFToMsg(transform,  msg);
+			fk_mat = tf2::transformToKDL(msg);
+
+		}
+		catch (tf::TransformException ex)
+		{
+		      ROS_ERROR("%s",ex.what());
+		      ros::Duration(1.0).sleep();
+		 }
 
 	}
 
+	//comput fk from chain base_link to chain tip link
 	for (uint16_t i = 0; i < this->segments; ++i)
 	{
 		//if revolute joint than multiply with joint angles
