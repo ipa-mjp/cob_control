@@ -89,7 +89,7 @@ Kinematics::Kinematics(const std::string rbt_description , const std::string& ch
     //if debug true than print
     if (_DEBUG_)
     {
-    	//this->printDataMemebers();
+    	this->printDataMemebers();
     	//std::cout<<"\033[20m"<<"###########  fk correctness ######### "	<<"\033[0m"<<std::endl;
 
     	KDL::JntArray jnt_angles = KDL::JntArray(this->dof);
@@ -99,7 +99,11 @@ Kinematics::Kinematics(const std::string rbt_description , const std::string& ch
     	jnt_angles(3) = 1.57;
 		this->forwardKinematics(jnt_angles);
 
-		this->kdl_forwardKinematics();
+		this->kdl_forwardKinematics(jnt_angles);
+
+		this->computeJacobian(jnt_angles);
+
+		this->kdl_computeJacobian(jnt_angles);
     }
 }
 
@@ -267,7 +271,7 @@ void Kinematics::forwardKinematics(const KDL::JntArray& jnt_angels)
 
 	}
 
-	//comput fk from chain base_link to chain tip link
+	//comput fk from chain base_link to chain tip link, think with dof
 	for (uint16_t i = 0; i < this->segments; ++i)
 	{
 		//if revolute joint than multiply with joint angles
@@ -315,7 +319,7 @@ void Kinematics::forwardKinematics(const KDL::JntArray& jnt_angels)
 		}
 
 		fk_mat = fk_mat * this->jnt_homo_mat[i];
-
+		jnt_fk_mat.push_back(fk_mat);
 
     	if (_DEBUG_)
     	{
@@ -332,21 +336,18 @@ void Kinematics::forwardKinematics(const KDL::JntArray& jnt_angels)
     	}
 
 	}
+
+	this->fk_mat = fk_mat;
+
 }
 
 //todo: can not find fk from root frame
-void Kinematics::kdl_forwardKinematics(void)
+void Kinematics::kdl_forwardKinematics(const KDL::JntArray& jnt_angels)
 {
 	using namespace KDL;
 	KDL::Frame fk_mat = KDL::Frame::Identity();
 	ChainFkSolverPos_recursive fksolver = ChainFkSolverPos_recursive(this->kinematic_chain);
 
-
-	KDL::JntArray jointpositions = JntArray(this->dof);
-	jointpositions(0) = 1.57;
-	jointpositions(1) = 1.57;
-	jointpositions(2) = 1.57;
-	jointpositions(3) = 1.57;
 
 	//find transformation between chain_base_link & root frame if different
 		if (this->root_frame != this->chain_base_link)
@@ -371,7 +372,7 @@ void Kinematics::kdl_forwardKinematics(void)
 
 		}
 
-	bool kinematic_status = fksolver.JntToCart(jointpositions, fk_mat);
+	bool kinematic_status = fksolver.JntToCart(jnt_angels, fk_mat);
 
 	if (_DEBUG_)
 	{
@@ -387,6 +388,116 @@ void Kinematics::kdl_forwardKinematics(void)
 						<<"\033[32;0m"<<std::endl;
 
 	}
+
+}
+
+
+void Kinematics::computeJacobian(const KDL::JntArray& jnt_angels)
+{
+	//todo: change dimension of matrix (means 7) accord to dof
+	Eigen::Matrix<double, 6, 7> 			  JacobianMatrix;
+	typedef Eigen::Matrix<double, 3, 1>       Cart3Vector;
+
+	 Cart3Vector p(0,0,0);	Cart3Vector z_0(0,0,1); 	Cart3Vector p_0(0,0,0);
+
+	// dist from end-effector to base-link
+	p(0) = fk_mat.p.x();	p(1) = fk_mat.p.y();	p(2) = fk_mat.p.z();
+
+	if (_DEBUG_)
+		{
+				std::cout<<"\033[94m"<<"End-effector pose vector relative to base link " <<"\033[0m"<<std::endl;
+				std::cout<<"\033[94m" << p  <<"\033[0m" <<std::endl;
+		}
+
+
+	//compute linear and angular velocity at each joint
+	for(uint16_t i = 0; i < this->segments; ++i)
+	{
+		Cart3Vector J_v(0,0,0), J_o(0,0,0);
+		if (i == 0)
+		{
+			if ( this-> jnts.at(i).getType() == 0 )	//revolute joint
+			{
+				J_v = z_0.cross( p );
+				J_o = z_0;
+			}
+
+			if ( this-> jnts.at(i).getType() == 8 )	//prismatic joint
+			{
+				J_v = z_0;
+				J_o = p_0;
+			}
+			else
+			{
+				;
+			}
+		}
+		else
+		{
+			Cart3Vector z_i(0,0,0);	Cart3Vector p_i(0,0,0);
+
+			//third col of rot matrix at each jnt with respect to base link
+			z_i(0) = jnt_fk_mat.at(i).M(0,2);		z_i(1) = jnt_fk_mat.at(i).M(1,2);		z_i(2) = jnt_fk_mat.at(i).M(2,2);
+			p_i(0) = jnt_fk_mat.at(i).p(0);			p_i(1) = jnt_fk_mat.at(i).p(1);		p_i(2) = jnt_fk_mat.at(i).p(2);
+
+			if ( this-> jnts.at(i).getType() == 0 )	//revolute joint
+			{
+				J_v = z_i.cross( p - p_i );
+				J_o = z_i;
+			}
+
+			if ( this-> jnts.at(i).getType() == 8 )	//prismatic joint
+			{
+				J_v = z_i;
+				J_o = p_0;
+			}
+			else
+			{
+				;
+			}
+		}
+
+		JacobianMatrix(0,i) = J_v(0);	JacobianMatrix(1,i) = J_v(1);	JacobianMatrix(2,i) = J_v(2);
+		JacobianMatrix(3,i) = J_o(0);	JacobianMatrix(4,i) = J_o(1);	JacobianMatrix(5,i) = J_o(2);
+	}
+
+	if (_DEBUG_)
+	{
+			std::cout<<"\033[20m"<<"Jacobian Matrix " <<"\033[0m"<<std::endl;
+
+			std::cout<<"\033[20m"	<< JacobianMatrix << "\t" <<"\033[0m"<<std::endl;
+
+	}
+
+
+}
+
+void Kinematics::kdl_computeJacobian(const KDL::JntArray& jnt_angels)
+{
+
+	KDL::ChainJntToJacSolver jacobi_solver = KDL::ChainJntToJacSolver(this->kinematic_chain);
+
+		KDL::Jacobian j_kdl = KDL::Jacobian(this->dof);
+		int jacobian_state = jacobi_solver.JntToJac(jnt_angels, j_kdl);
+
+		Eigen::Matrix<double, 6, 7>  JacobianMatrix;
+
+		for (unsigned int i = 0; i < 6; ++i)
+				{
+					for (unsigned int j = 0; j < this->dof; ++j)
+					{
+						JacobianMatrix(i,j) = j_kdl(i,j);
+					}
+				}
+
+		if (_DEBUG_)
+		{
+				std::cout<<"\033[94m"<<"kdl Jacobian Matrix " <<"\033[0m"<<std::endl;
+
+				std::cout<<"\033[94m"	<< JacobianMatrix << "\t" <<"\033[0m"<<std::endl;
+
+		}
+
 
 }
 

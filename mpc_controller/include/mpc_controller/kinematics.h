@@ -23,7 +23,7 @@
 #include <kdl_conversions/kdl_msg.h>
 #include <kdl/chainfksolver.hpp>
 #include <kdl/chainfksolverpos_recursive.hpp>
-
+#include <kdl/chainjnttojacsolver.hpp>
 //C++
 #include <iostream>
 #include <map>
@@ -63,7 +63,8 @@ namespace nmpc
 		std::vector<KDL::Joint>	jnts;
 		std::vector<KDL::Frame>	jnt_homo_mat;	//homo matrix of each frame with prevoius joint
 
-		std::vector<KDL::Frame> fk_mat;	//ff_mat
+		std::vector<KDL::Frame> jnt_fk_mat;	//ff_mat
+		KDL::Frame fk_mat;
 
 		//bool _DEBUG_;
 		void printDataMemebers(void);
@@ -77,7 +78,11 @@ namespace nmpc
 
 		void forwardKinematics(const KDL::JntArray& jnt_angels);
 
-		void kdl_forwardKinematics(void);
+		void computeJacobian(const KDL::JntArray& jnt_angels);
+
+		void kdl_forwardKinematics(const KDL::JntArray& jnt_angels);
+
+		void kdl_computeJacobian(const KDL::JntArray& jnt_angels);
 
 	};
 
