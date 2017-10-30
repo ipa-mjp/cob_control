@@ -94,6 +94,8 @@ Kinematics::Kinematics(const std::string rbt_description , const std::string& ch
 		jnt_angels.resize( this->dof, 0.0 );
 		jnt_angels[0] = 1.57;	jnt_angels[1] = 1.57;
 		this->forwardKinematics(jnt_angels);
+
+		this->kdl_forwardKinematics();
     }
 }
 
@@ -325,6 +327,61 @@ void Kinematics::forwardKinematics(const std::vector<double>& jnt_angels)
     	}
 
 	}
+}
+
+//todo: can not find fk from root frame
+void Kinematics::kdl_forwardKinematics(void)
+{
+	using namespace KDL;
+	KDL::Frame fk_mat = KDL::Frame::Identity();
+	ChainFkSolverPos_recursive fksolver = ChainFkSolverPos_recursive(this->kinematic_chain);
+
+
+	KDL::JntArray jointpositions = JntArray(this->dof);
+	jointpositions(0) = 1.57;
+	jointpositions(1) = 1.57;
+
+
+	//find transformation between chain_base_link & root frame if different
+		if (this->root_frame != this->chain_base_link)
+		{
+			tf::TransformListener listener;
+			tf::StampedTransform transform;
+			try
+			{	//world arm_1_link
+				listener.waitForTransform(this->root_frame,this->chain_base_link, ros::Time(0), ros::Duration(5.0));	//link2,3 = 3.0,link4,5 = 4.0, link6,7 = 5.0
+				listener.lookupTransform(this->root_frame, this->chain_base_link, ros::Time(0), transform);
+
+				geometry_msgs::TransformStamped msg;
+				tf::transformStampedTFToMsg(transform,  msg);
+				fk_mat = tf2::transformToKDL(msg);
+
+			}
+			catch (tf::TransformException ex)
+			{
+			      ROS_ERROR("%s",ex.what());
+			      ros::Duration(1.0).sleep();
+			 }
+
+		}
+
+	bool kinematic_status = fksolver.JntToCart(jointpositions, fk_mat);
+
+	if (_DEBUG_)
+	{
+			std::cout<<"\033[36;1m"<<"kdl fk matrix of " <<"\033[36;0m"<<std::endl;
+			KDL::Rotation rot_mat = fk_mat.M;
+			KDL::Vector pos_mat = fk_mat.p;
+
+				//for (unsigned int i = 0; i < it->)
+				std::cout<<"\033[32;1m"	<<	" rxx "<< rot_mat(0,0) <<	" rxy "<< rot_mat(0,1) <<	" rxz "<< rot_mat(0,2)	<< "\n"
+										<<	" ryx "<< rot_mat(1,0) <<	" ryy "<< rot_mat(1,1) <<	" ryz "<< rot_mat(1,2)	<< "\n"
+										<<	" rzx "<< rot_mat(2,0) <<	" rzy "<< rot_mat(2,1) <<	" rzz "<< rot_mat(2,2)	<< "\n"
+										<<	" px "<< pos_mat.x() <<	" py "<< pos_mat.y() <<	" pz "<< pos_mat.z()
+						<<"\033[32;0m"<<std::endl;
+
+	}
+
 }
 
 

@@ -21,6 +21,8 @@
 #include <kdl/jntarrayvel.hpp>
 #include <kdl/frames.hpp>
 #include <kdl_conversions/kdl_msg.h>
+#include <kdl/chainfksolver.hpp>
+#include <kdl/chainfksolverpos_recursive.hpp>
 
 //C++
 #include <iostream>
@@ -74,6 +76,8 @@ namespace nmpc
 		Kinematics(const std::string rbt_description = "/robot_description", const std::string& chain_base_link="base_link", const std::string& chain_tip_link="gripper", const std::string& root_frame="world");
 
 		void forwardKinematics(const std::vector<double>& jnt_angles);
+
+		void kdl_forwardKinematics(void);
 
 	};
 
