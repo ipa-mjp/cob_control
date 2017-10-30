@@ -392,10 +392,11 @@ void Kinematics::kdl_forwardKinematics(const KDL::JntArray& jnt_angels)
 }
 
 
+//todo: make jacobian function independance of fk by directly using info of jnt_angles
 void Kinematics::computeJacobian(const KDL::JntArray& jnt_angels)
 {
 	//todo: change dimension of matrix (means 7) accord to dof
-	Eigen::Matrix<double, 6, 7> 			  JacobianMatrix;
+
 	typedef Eigen::Matrix<double, 3, 1>       Cart3Vector;
 
 	 Cart3Vector p(0,0,0);	Cart3Vector z_0(0,0,1); 	Cart3Vector p_0(0,0,0);
@@ -501,4 +502,57 @@ void Kinematics::kdl_computeJacobian(const KDL::JntArray& jnt_angels)
 
 }
 
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+inline
+std::string Kinematics::getChainBaseLink(void)
+{
+	return this->chain_base_link;
+}
 
+inline
+void Kinematics::getChainBaseLink(std::string& base_link)
+{
+	base_link = this->chain_base_link;
+}
+
+inline
+std::string Kinematics::getChainTipLink(void)
+{
+	return this->chain_tip_link;
+}
+
+inline
+void Kinematics::getChainTipLink(std::string& tip_link)
+{
+	tip_link = this->chain_tip_link;
+}
+
+inline
+std::string Kinematics::getChainRootLink(void)
+{
+	return this->root_frame;
+}
+
+inline
+void Kinematics::getChainRootLink(std::string& root_frame)
+{
+	root_frame = this->root_frame;
+}
+
+inline
+uint16_t Kinematics::getNumberOfJnts(void)
+{
+	return this->dof;
+}
+
+inline
+void Kinematics::getNumberOfJnts(uint16_t& nr_jnts)
+{
+	nr_jnts = this->dof;
+}
+
+uint16_t Kinematics::getNumberOfSegments(void)
+{
+	return this->segments;
+}
+void getNumberOfSegments(uint16_t& nr_segments);

@@ -65,6 +65,7 @@ namespace nmpc
 
 		std::vector<KDL::Frame> jnt_fk_mat;	//ff_mat
 		KDL::Frame fk_mat;
+		Eigen::Matrix<double, 6, 7> JacobianMatrix;	//Jacobian Matrix
 
 		//bool _DEBUG_;
 		void printDataMemebers(void);
@@ -83,6 +84,36 @@ namespace nmpc
 		void kdl_forwardKinematics(const KDL::JntArray& jnt_angels);
 
 		void kdl_computeJacobian(const KDL::JntArray& jnt_angels);
+
+
+		//get functions
+		std::string getChainBaseLink(void);
+		void getChainBaseLink(std::string& base_link);
+
+		std::string getChainTipLink(void);
+		void getChainTipLink(std::string& tip_link);
+
+		std::string getChainRootLink(void);
+		void getChainRootLink(std::string& root_frame);
+
+		uint16_t getNumberOfJnts(void);
+		void getNumberOfJnts(uint16_t& nr_jnts);
+
+		uint16_t getNumberOfSegments(void);
+		void getNumberOfSegments(uint16_t& nr_segments);
+
+		std::vector<KDL::Joint> getJntsInfo(void);
+		void getJntsInfo(std::vector<KDL::Joint>& jnts);
+
+		void getForwardKinematics(KDL::Frame& fk_mat);
+		void getForwardKinematics(Eigen::MatrixXd& fk_mat);
+		KDL::Frame getForwardKinematics(void);
+		//Eigen::MatrixXd getForwardKinematics(void);
+
+		void getJacobian(Eigen::MatrixXd& j_mat);
+		Eigen::MatrixXd getJacobian(void);
+
+		//set functions
 
 	};
 
