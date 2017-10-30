@@ -91,10 +91,13 @@ Kinematics::Kinematics(const std::string rbt_description , const std::string& ch
     {
     	//this->printDataMemebers();
     	//std::cout<<"\033[20m"<<"###########  fk correctness ######### "	<<"\033[0m"<<std::endl;
-		std::vector<double> jnt_angels;
-		jnt_angels.resize( this->dof, 0.0 );
-		jnt_angels[2] = -1.57;	//jnt_angels[1] = 1.57;
-		this->forwardKinematics(jnt_angels);
+
+    	KDL::JntArray jnt_angles = KDL::JntArray(this->dof);
+    	jnt_angles(0) = 1.57;
+    	jnt_angles(1) = 1.57;
+    	jnt_angles(2) = 1.57;
+    	jnt_angles(3) = 1.57;
+		this->forwardKinematics(jnt_angles);
 
 		this->kdl_forwardKinematics();
     }
@@ -235,10 +238,10 @@ void Kinematics::printDataMemebers(void)
 }
 
 //todo: here hard-coded rot_axis, set proper way
-void Kinematics::forwardKinematics(const std::vector<double>& jnt_angels)
+void Kinematics::forwardKinematics(const KDL::JntArray& jnt_angels)
 {
 	KDL::Frame fk_mat = KDL::Frame::Identity();
-	std::vector<unsigned int> rot_axis{0,1,0};
+	std::vector<unsigned int> rot_axis{0,0,1};
 	unsigned int cnt = 0;
 
 	//find transformation between chain_base_link & root frame if different
@@ -272,11 +275,11 @@ void Kinematics::forwardKinematics(const std::vector<double>& jnt_angels)
 		{
 
 			KDL::Frame lcl_homo_mat = KDL::Frame::Identity();
-			this->createRoatationMatrix( jnt_angels.at(cnt), rot_axis, lcl_homo_mat );
+			this->createRoatationMatrix( jnt_angels(cnt), rot_axis, lcl_homo_mat );
 			this->jnt_homo_mat[i] =	this->jnt_homo_mat[i] * lcl_homo_mat;
 			cnt++;
 
-
+			/*
 	    	if (_DEBUG_)
 	    	{
 				std::cout<<"\033[36;1m"<<"lcl homo matrix of " << this->jnts.at(i).getName() <<"\033[36;0m"<<std::endl;
@@ -305,7 +308,7 @@ void Kinematics::forwardKinematics(const std::vector<double>& jnt_angels)
 																<<	" rzx "<< rot_mat(2,0) <<	" rzy "<< rot_mat(2,1) <<	" rzz "<< rot_mat(2,2)	<< "\n"
 																<<	" px "<< pos_mat.x() <<	" py "<< pos_mat.y() <<	" pz "<< pos_mat.z()
 							<<"\033[32;0m"<<std::endl;
-	    	}
+	    	}*/
 
 
 
@@ -340,9 +343,10 @@ void Kinematics::kdl_forwardKinematics(void)
 
 
 	KDL::JntArray jointpositions = JntArray(this->dof);
-	jointpositions(2) = -1.57;
-	jointpositions(1) = 0.0;
-
+	jointpositions(0) = 1.57;
+	jointpositions(1) = 1.57;
+	jointpositions(2) = 1.57;
+	jointpositions(3) = 1.57;
 
 	//find transformation between chain_base_link & root frame if different
 		if (this->root_frame != this->chain_base_link)

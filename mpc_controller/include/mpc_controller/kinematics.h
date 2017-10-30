@@ -75,7 +75,7 @@ namespace nmpc
 
 		Kinematics(const std::string rbt_description = "/robot_description", const std::string& chain_base_link="base_link", const std::string& chain_tip_link="gripper", const std::string& root_frame="world");
 
-		void forwardKinematics(const std::vector<double>& jnt_angles);
+		void forwardKinematics(const KDL::JntArray& jnt_angels);
 
 		void kdl_forwardKinematics(void);
 
