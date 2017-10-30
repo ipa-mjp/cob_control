@@ -92,7 +92,7 @@ Kinematics::Kinematics(const std::string rbt_description , const std::string& ch
     	//std::cout<<"\033[20m"<<"###########  fk correctness ######### "	<<"\033[0m"<<std::endl;
 		std::vector<double> jnt_angels;
 		jnt_angels.resize( this->dof, 0.0 );
-		//jnt_angels[0] = 1.57;
+		jnt_angels[0] = 1.57;	jnt_angels[1] = 1.57;
 		this->forwardKinematics(jnt_angels);
     }
 }
@@ -272,7 +272,7 @@ void Kinematics::forwardKinematics(const std::vector<double>& jnt_angels)
 			this->jnt_homo_mat[i] =	this->jnt_homo_mat[i] * lcl_homo_mat;
 			cnt++;
 
-			/*
+
 	    	if (_DEBUG_)
 	    	{
 				std::cout<<"\033[36;1m"<<"lcl homo matrix of " << this->jnts.at(i).getName() <<"\033[36;0m"<<std::endl;
@@ -303,7 +303,7 @@ void Kinematics::forwardKinematics(const std::vector<double>& jnt_angels)
 							<<"\033[32;0m"<<std::endl;
 	    	}
 
-			*/
+
 
 		}
 
