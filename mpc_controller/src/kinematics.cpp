@@ -59,6 +59,7 @@ Kinematics::Kinematics(const std::string rbt_description , const std::string& ch
     	KDL::Vector rot;
     	this->kinematic_chain.getSegment(i).getFrameToTip().M.GetRotAngle(rot);
     	this->jnt_rot_axis.push_back(rot);
+    	std::cout<<rot.x()<<" , "<<rot.y()<<" , "<<rot.z()<<std::endl;
 
     	this->jnt_homo_mat.push_back(this->frames.at(i));
 
@@ -92,7 +93,7 @@ Kinematics::Kinematics(const std::string rbt_description , const std::string& ch
     	//std::cout<<"\033[20m"<<"###########  fk correctness ######### "	<<"\033[0m"<<std::endl;
 		std::vector<double> jnt_angels;
 		jnt_angels.resize( this->dof, 0.0 );
-		jnt_angels[0] = 1.57;	jnt_angels[1] = 1.57;
+		jnt_angels[2] = -1.57;	//jnt_angels[1] = 1.57;
 		this->forwardKinematics(jnt_angels);
 
 		this->kdl_forwardKinematics();
@@ -233,10 +234,11 @@ void Kinematics::printDataMemebers(void)
 */
 }
 
+//todo: here hard-coded rot_axis, set proper way
 void Kinematics::forwardKinematics(const std::vector<double>& jnt_angels)
 {
 	KDL::Frame fk_mat = KDL::Frame::Identity();
-	std::vector<unsigned int> rot_axis{0,0,1};
+	std::vector<unsigned int> rot_axis{0,1,0};
 	unsigned int cnt = 0;
 
 	//find transformation between chain_base_link & root frame if different
@@ -338,8 +340,8 @@ void Kinematics::kdl_forwardKinematics(void)
 
 
 	KDL::JntArray jointpositions = JntArray(this->dof);
-	jointpositions(0) = 1.57;
-	jointpositions(1) = 1.57;
+	jointpositions(2) = -1.57;
+	jointpositions(1) = 0.0;
 
 
 	//find transformation between chain_base_link & root frame if different
