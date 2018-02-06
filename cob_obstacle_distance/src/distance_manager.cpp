@@ -173,6 +173,12 @@ void DistanceManager::addObstacle(const std::string& id, PtrIMarkerShape_t s)
     this->obstacle_mgr_->addShape(id, s);
 }
 
+void DistanceManager::removeObstacle(const std::string& id)
+{
+   this->obstacle_mgr_->removeShape(id);
+   //this->object_of_interest_mgr_->removeShape(id);
+}
+
 
 void DistanceManager::addObjectOfInterest(const std::string& id, PtrIMarkerShape_t s)
 {
@@ -204,7 +210,7 @@ void DistanceManager::calculate()
         KDL::JntArrayVel jnt_arr(last_q_, last_q_dot_);
         adv_chn_fk_solver_vel_->JntToCart(jnt_arr, p_dot_out);
     }
-
+	
     for (ShapesManager::MapIter_t it = this->object_of_interest_mgr_->begin(); it != this->object_of_interest_mgr_->end(); ++it)
     {
         std::string object_of_interest_name = it->first;
@@ -256,6 +262,7 @@ void DistanceManager::calculate()
             for (ShapesManager::MapIter_t it = this->obstacle_mgr_->begin(); it != this->obstacle_mgr_->end(); ++it)
             {
                 const std::string obstacle_id = it->first;
+		ROS_WARN_STREAM(obstacle_id);
                 if (this->link_to_collision_.ignoreSelfCollisionPart(object_of_interest_name, obstacle_id))
                 {
                     // Ignore elements that can never be in collision
@@ -264,6 +271,7 @@ void DistanceManager::calculate()
                 }
 
                 PtrIMarkerShape_t obstacle = it->second;
+		
                 fcl::CollisionObject collision_obj = obstacle->getCollisionObject();
                 fcl::DistanceResult dist_result;
                 fcl::DistanceRequest dist_request(true, 5.0, 0.01);
@@ -434,13 +442,27 @@ void DistanceManager::registerObstacle(const moveit_msgs::CollisionObject::Const
         return;
     }
 
-    if ((msg->type.db.length() > 0 && 0 < msg->mesh_poses.size()) ||
+    if (msg->operation == msg->REMOVE && this->obstacle_mgr_->count(msg->id) > 0)
+    {	
+	ROS_ERROR("****************************");
+	ROS_ERROR("****************************");
+	ROS_ERROR("****************************");
+	ROS_ERROR("****************************");
+        ROS_WARN_STREAM("registerObstacle: Element " << msg->id << " exists. Removing from environment");
+	this->buildObstacleMesh(msg, frame_transform_root);
+	//return;
+	ROS_ERROR("****************************");
+	ROS_ERROR("****************************");
+	ROS_ERROR("****************************");
+    } 
+
+    if (msg->operation != msg->REMOVE && (msg->type.db.length() > 0 && 0 < msg->mesh_poses.size()) ||
        (msg->meshes.size() > 0 && msg->meshes.size() == msg->mesh_poses.size()))
     {
         this->buildObstacleMesh(msg, frame_transform_root);
     }
 
-    if (msg->primitives.size() > 0 && msg->primitives.size() == msg->primitive_poses.size())
+    if (msg->operation != msg->REMOVE && msg->primitives.size() > 0 && msg->primitives.size() == msg->primitive_poses.size())
     {
         this->buildObstaclePrimitive(msg, frame_transform_root);
     }
@@ -513,7 +535,8 @@ void DistanceManager::buildObstacleMesh(const moveit_msgs::CollisionObject::Cons
     }
     else if (msg->REMOVE == msg->operation)
     {
-        this->obstacle_mgr_->removeShape(msg->id);
+	this->removeObstacle(msg->id);
+        //this->obstacle_mgr_->removeShape(msg->id);
     }
     else
     {

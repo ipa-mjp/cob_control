@@ -130,6 +130,12 @@ class DistanceManager
         void drawObstacles();
 
         /**
+         * Simply remove obstacle markers in RVIZ.
+         */
+        void removeObstacle(const std::string& id);
+
+
+        /**
          * Simply draw all object of interest markers in RVIZ.
          */
         void drawObjectsOfInterest();
