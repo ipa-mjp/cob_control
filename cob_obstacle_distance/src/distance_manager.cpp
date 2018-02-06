@@ -262,7 +262,7 @@ void DistanceManager::calculate()
             for (ShapesManager::MapIter_t it = this->obstacle_mgr_->begin(); it != this->obstacle_mgr_->end(); ++it)
             {
                 const std::string obstacle_id = it->first;
-		ROS_WARN_STREAM(obstacle_id);
+		
                 if (this->link_to_collision_.ignoreSelfCollisionPart(object_of_interest_name, obstacle_id))
                 {
                     // Ignore elements that can never be in collision
