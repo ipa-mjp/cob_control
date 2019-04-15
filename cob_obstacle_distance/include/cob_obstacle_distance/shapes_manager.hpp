@@ -29,6 +29,8 @@ class ShapesManager
 {
     private:
         std::unordered_map<std::string, PtrIMarkerShape_t> shapes_;
+        //std::ordered_map<std::string, PtrIMarkerShape_t> shapes_;
+
         const ros::Publisher& pub_;
 
     public:

@@ -25,9 +25,9 @@ from shape_msgs.msg import SolidPrimitive, Mesh
 
 if __name__ == "__main__":
     rospy.init_node("simple_obstacle_pub")
-    root_frame = "/odom_combined"
+    root_frame = "/world"
 
-    pub = rospy.Publisher("obstacle_distance/registerObstacle", CollisionObject, queue_size = 1)
+    pub = rospy.Publisher("/arm/obstacle_distance/registerObstacle", CollisionObject, queue_size = 1)
 
     while pub.get_num_connections() < 1:
         if rospy.is_shutdown():

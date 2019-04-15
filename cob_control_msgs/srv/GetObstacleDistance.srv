@@ -3,3 +3,4 @@ string[] objects
 ---
 string[] link_to_object
 float64[] distances
+ObstacleDistances obs_distances

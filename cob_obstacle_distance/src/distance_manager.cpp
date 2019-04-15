@@ -107,6 +107,21 @@ int DistanceManager::init()
         return -4;
     }
 
+    // links of the chain to be considered for collision avoidance
+    if (!nh_.getParam("twist_controller/collision_check_links", this->collision_check_links_))
+    {
+        ROS_WARN_STREAM("Parameter 'collision_check_links' not set. Collision Avoidance constraint will not do anything.");
+        this->collision_check_links_.clear();
+    }
+    else
+    {
+      ROS_INFO("Collision Avoidance has been activated! Register links!");
+      if(!this->registerCollisionLinks())
+      {
+        ROS_ERROR("Registration of links failed. CA not possible");
+      }
+    }
+
     robot_structure.getChain(this->chain_base_link_, this->chain_tip_link_, this->chain_);
     if (chain_.getNrOfJoints() == 0)
     {
@@ -151,6 +166,8 @@ int DistanceManager::init()
         }
     }
 
+	ROS_INFO("!!!!!!!!!! Init !!!!!!!!!!!");
+
     return 0;
 }
 
@@ -191,6 +208,36 @@ void DistanceManager::drawObjectsOfInterest()
     this->object_of_interest_mgr_->draw();
 }
 
+bool DistanceManager::registerCollisionLinks()
+{
+    ROS_WARN_COND(collision_check_links_.size() <= 0,
+                  "No collision_check_links set for this chain. Nothing will be registered. Ensure parameters are set correctly.");
+
+    for (std::vector<std::string>::const_iterator it = collision_check_links_.begin();
+         it != collision_check_links_.end();
+         it++)
+    {
+        ROS_INFO_STREAM("Trying to register for " << *it);
+        cob_srvs::SetString r;
+        r.request.data = *it;
+        //if (register_link_client_.call(r))
+        if (this->registerLinkOfInterest(r.request, r.response))
+        {
+            ROS_INFO_STREAM("Called registration service with success: " << int(r.response.success) << ". Got message: " << r.response.message);
+            if (!r.response.success)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            ROS_WARN_STREAM("Failed to call registration service for namespace: " << nh_.getNamespace());
+            return false;
+        }
+    }
+
+    return true;
+}
 
 void DistanceManager::calculate()
 {
@@ -198,16 +245,20 @@ void DistanceManager::calculate()
 
     // Transform needs to be calculated only once for robot structure
     // and is same for all obstacles.
+ 
     if (this->object_of_interest_mgr_->count() > 0)
     {
         KDL::FrameVel p_dot_out;
         KDL::JntArrayVel jnt_arr(last_q_, last_q_dot_);
         adv_chn_fk_solver_vel_->JntToCart(jnt_arr, p_dot_out);
     }
-
+    std::lock_guard<std::mutex> lock(obstacle_mgr_mtx_);
+    for (ShapesManager::MapIter_t it_obs = this->obstacle_mgr_->begin(); it_obs != this->obstacle_mgr_->end(); ++it_obs)
+    {
     for (ShapesManager::MapIter_t it = this->object_of_interest_mgr_->begin(); it != this->object_of_interest_mgr_->end(); ++it)
     {
         std::string object_of_interest_name = it->first;
+        std::cout << object_of_interest_name << std::endl;
         std::vector<std::string>::const_iterator str_it = std::find(this->segments_.begin(),
                                                                     this->segments_.end(),
                                                                     object_of_interest_name);
@@ -252,10 +303,10 @@ void DistanceManager::calculate()
         fcl::CollisionObject ooi_co = ooi->getCollisionObject();
         fcl::FCL_REAL last_dist = std::numeric_limits<fcl::FCL_REAL>::max();
         {  // introduced the block to lock this critical section until block leaved.
-            std::lock_guard<std::mutex> lock(obstacle_mgr_mtx_);
-            for (ShapesManager::MapIter_t it = this->obstacle_mgr_->begin(); it != this->obstacle_mgr_->end(); ++it)
+            ///std::lock_guard<std::mutex> lock(obstacle_mgr_mtx_);
+            ///for (ShapesManager::MapIter_t it = this->obstacle_mgr_->begin(); it != this->obstacle_mgr_->end(); ++it)
             {
-                const std::string obstacle_id = it->first;
+                const std::string obstacle_id = it_obs->first;
                 if (this->link_to_collision_.ignoreSelfCollisionPart(object_of_interest_name, obstacle_id))
                 {
                     // Ignore elements that can never be in collision
@@ -263,7 +314,7 @@ void DistanceManager::calculate()
                     continue;
                 }
 
-                PtrIMarkerShape_t obstacle = it->second;
+                PtrIMarkerShape_t obstacle = it_obs->second;
                 fcl::CollisionObject collision_obj = obstacle->getCollisionObject();
                 fcl::DistanceResult dist_result;
                 fcl::DistanceRequest dist_request(true, 5.0, 0.01);
@@ -299,8 +350,8 @@ void DistanceManager::calculate()
             }
         }
     }
-
-    if (obstacle_distances.distances.size() > 0)
+  }
+    //if (obstacle_distances.distances.size() > 0)
     {
         this->obstacle_distances_pub_.publish(obstacle_distances);
     }

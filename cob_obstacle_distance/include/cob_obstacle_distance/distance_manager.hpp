@@ -53,6 +53,7 @@ class DistanceManager
         std::string root_frame_id_;
         std::string chain_base_link_;
         std::string chain_tip_link_;
+        std::vector<std::string> collision_check_links_;
 
         boost::scoped_ptr<ShapesManager> obstacle_mgr_;
         boost::scoped_ptr<ShapesManager> object_of_interest_mgr_;
@@ -93,6 +94,12 @@ class DistanceManager
          * @param transform The transformation from a frame in msg header to root_frame_id.
          */
         void buildObstaclePrimitive(const moveit_msgs::CollisionObject::ConstPtr& msg, const tf::StampedTransform& transform);
+
+        /**
+         * @brief registerCollisionLinks registerd link of interest
+         * @return true when successed
+         */
+        bool registerCollisionLinks();
 
     public:
         /**
