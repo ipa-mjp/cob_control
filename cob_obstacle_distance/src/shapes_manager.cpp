@@ -37,12 +37,14 @@ void ShapesManager::addShape(const std::string& id, PtrIMarkerShape_t s)
 
 void ShapesManager::removeShape(const std::string& id)
 {
+    visualization_msgs::MarkerArray marker_array;
     if (this->shapes_.count(id))
     {
         PtrIMarkerShape_t s = this->shapes_[id];
         visualization_msgs::Marker marker = s->getMarker();
         marker.action = visualization_msgs::Marker::DELETE;
-        this->pub_.publish(marker);
+        marker_array.markers.push_back(marker);
+        this->pub_.publish(marker_array);
     }
 
     this->shapes_.erase(id);
